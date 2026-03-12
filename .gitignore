@@ -1,4 +1,5 @@
 bin/
+keda-gpu-scaler
 *.exe
 *.test
 *.out
