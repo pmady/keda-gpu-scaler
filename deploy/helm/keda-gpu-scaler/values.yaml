@@ -1,0 +1,46 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/pmady/keda-gpu-scaler
+  pullPolicy: IfNotPresent
+  tag: ""  # defaults to Chart appVersion
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+service:
+  type: ClusterIP
+  port: 6000
+
+grpc:
+  port: 6000
+
+logLevel: info
+
+# GPU node selector — deploy only on nodes with NVIDIA GPUs
+nodeSelector:
+  nvidia.com/gpu.present: "true"
+
+tolerations:
+  - key: nvidia.com/gpu
+    operator: Exists
+    effect: NoSchedule
+
+affinity: {}
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 128Mi
+  requests:
+    cpu: 100m
+    memory: 64Mi
+
+# NVIDIA runtime class (if using containerd with NVIDIA runtime)
+runtimeClassName: nvidia

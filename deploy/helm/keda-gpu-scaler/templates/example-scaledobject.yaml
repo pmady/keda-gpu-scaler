@@ -1,0 +1,26 @@
+# Example ScaledObject for scaling a vLLM deployment using keda-gpu-scaler.
+# This is NOT deployed by the Helm chart — copy and customize for your workload.
+#
+# Usage:
+#   kubectl apply -f example-scaledobject.yaml
+#
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: vllm-gpu-scaler
+spec:
+  scaleTargetRef:
+    name: vllm-deployment        # Your vLLM Deployment name
+  minReplicaCount: 0              # Scale to zero when idle
+  maxReplicaCount: 8
+  cooldownPeriod: 60
+  triggers:
+    - type: external
+      metadata:
+        scalerAddress: "keda-gpu-scaler.default.svc.cluster.local:6000"
+        profile: "vllm-inference"
+        # Override defaults if needed:
+        # targetGpuUtilization: "80"
+        # activationThreshold: "5"
+        # gpuIndex: "0"
+        # aggregation: "max"

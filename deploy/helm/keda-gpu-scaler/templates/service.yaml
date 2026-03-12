@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "keda-gpu-scaler.fullname" . }}
+  labels:
+    {{- include "keda-gpu-scaler.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: grpc
+      protocol: TCP
+      name: grpc
+  selector:
+    {{- include "keda-gpu-scaler.selectorLabels" . | nindent 4 }}
