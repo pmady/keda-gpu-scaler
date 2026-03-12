@@ -45,7 +45,7 @@ func main() {
 	flag.Parse()
 
 	logger := initLogger(*logLevel)
-	defer logger.Sync()
+	defer func() { _ = logger.Sync() }()
 
 	logger.Info("Starting keda-gpu-scaler",
 		zap.Int("port", *port),
@@ -57,7 +57,11 @@ func main() {
 	if err != nil {
 		logger.Fatal("Failed to initialize GPU collector", zap.Error(err))
 	}
-	defer collector.Close()
+	defer func() {
+		if err := collector.Close(); err != nil {
+			logger.Warn("Failed to close GPU collector", zap.Error(err))
+		}
+	}()
 
 	// Log detected GPUs
 	count, err := collector.DeviceCount()
