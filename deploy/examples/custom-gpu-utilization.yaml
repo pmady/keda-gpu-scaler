@@ -1,0 +1,23 @@
+# Example: ScaledObject with custom GPU utilization threshold.
+#
+# Instead of using a pre-built profile, this directly targets
+# GPU compute utilization at 80% with a scale-to-zero activation
+# threshold of 5%.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: gpu-util-scaler
+  namespace: ai-workloads
+spec:
+  scaleTargetRef:
+    name: my-inference-deployment
+  minReplicaCount: 0
+  maxReplicaCount: 16
+  cooldownPeriod: 120
+  triggers:
+    - type: external
+      metadata:
+        scalerAddress: "keda-gpu-scaler.keda.svc.cluster.local:6000"
+        targetGpuUtilization: "80"
+        activationThreshold: "5"
+        aggregation: "max"

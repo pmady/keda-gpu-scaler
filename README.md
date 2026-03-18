@@ -1,4 +1,4 @@
-# KEDA GPU Scaler for AI & HPC Workloads
+# KEDA NVML GPU Scaler
 
 [![CI](https://github.com/pmady/keda-gpu-scaler/actions/workflows/ci.yaml/badge.svg)](https://github.com/pmady/keda-gpu-scaler/actions/workflows/ci.yaml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
@@ -6,27 +6,33 @@
 ![Kubernetes: v1.24+](https://img.shields.io/badge/Kubernetes-v1.24%2B-blue)
 ![Go: 1.25+](https://img.shields.io/badge/Go-1.25%2B-00ADD8)
 
-An external scaler for [KEDA (Kubernetes Event-driven Autoscaling)](https://keda.sh/) designed specifically to autoscale AI inference, Large Language Model (LLM) deployments, and High-Performance Computing (HPC) workloads based on **native GPU hardware telemetry**.
+A native, high-performance [External Scaler](https://keda.sh/docs/latest/concepts/external-scalers/) for [KEDA](https://keda.sh/) that scales AI/ML workloads directly using NVIDIA Management Library (NVML) C-bindings.
+
+Bypass Prometheus, eliminate metric scraping latency, and scale your vLLM, Triton, and custom inference pods based on true, real-time GPU hardware utilization.
 
 ---
 
-## The Problem: Why a Custom GPU Scaler?
+## The Problem with Standard GPU Scaling
 
-Standard Kubernetes autoscaling (HPA) and traditional KEDA scalers rely on CPU and system memory metrics. However, deep learning and AI inference workloads are almost exclusively bottlenecked by **GPU Compute (SM Utilization)** and **GPU VRAM Allocation**.
+Scaling massive AI inference workloads (like DeepSeek or Llama 3) on Kubernetes using standard CPU/Memory HPA is fundamentally broken. GPU nodes often sit at 10% CPU utilization while the physical GPUs are 100% saturated with 200+ pending requests in the vLLM queue.
 
-If an LLM inference pod experiences a spike in requests, its CPU usage might remain flat while the GPU queue overflows, leading to severe latency or dropped requests.
+While you can work around this by deploying `dcgm-exporter` and using the KEDA Prometheus scaler, it introduces significant architecture bloat:
 
-Today, the workaround requires deploying DCGM Exporter as a sidecar, scraping it into Prometheus, and writing custom PromQL in KEDA's Prometheus scaler. **keda-gpu-scaler eliminates that entire stack** — it reads GPU metrics directly from NVML on each node and serves them to KEDA over gRPC.
+- **PromQL queries are brittle** and framework-dependent.
+- **Scraping intervals introduce scaling latency**, often 15-30 seconds late.
+- It requires maintaining a **centralized Prometheus server** just to read local node hardware states.
+
+**keda-gpu-scaler eliminates that entire stack** — it reads GPU metrics directly from NVML on each node and serves them to KEDA over gRPC.
 
 ### Why Not a Native KEDA Scaler?
 
-Embedding GPU support directly inside KEDA core is architecturally impossible for two reasons:
+Embedding GPU support directly inside KEDA core is architecturally impossible for three reasons:
 
-1. **CGO Constraint**: NVIDIA's Go bindings ([`go-nvml`](https://github.com/NVIDIA/go-nvml)) require CGO. KEDA builds with `CGO_ENABLED=0`.
+1. **CGO Constraint**: NVIDIA's Go bindings ([`go-nvml`](https://github.com/NVIDIA/go-nvml)) require `CGO_ENABLED=1`. KEDA builds with `CGO_ENABLED=0`.
 2. **Node-Level Hardware Access**: The KEDA operator runs as a central pod. NVML requires local GPU device access via `libnvidia-ml.so`, which only a **DaemonSet on GPU nodes** can provide.
 3. **Independent Release Cycle**: Ship GPU scaling improvements without waiting for KEDA release cycles.
 
-This scaler bridges that gap by running as a lightweight DaemonSet on every GPU node, collecting hardware metrics natively, and exposing them to KEDA via the [External Scaler gRPC protocol](https://keda.sh/docs/latest/concepts/external-scalers/).
+This design is documented in [KEDA issue #7538](https://github.com/kedacore/keda/issues/7538).
 
 ---
 
@@ -53,10 +59,10 @@ This scaler bridges that gap by running as a lightweight DaemonSet on every GPU 
 └──────────────────────────────────────────────────────────┘
 ```
 
-**Data Flow:**
-1. **Telemetry Ingestion** — The DaemonSet pod calls NVML directly on the local GPU hardware to collect real-time metrics (utilization, VRAM, temperature, power).
-2. **KEDA gRPC Interface** — Exposes `IsActive`, `StreamIsActive`, `GetMetricSpec`, and `GetMetrics` endpoints per the KEDA External Scaler contract.
-3. **ScaledObject Trigger** — Kubernetes deployments scale up/down (including to zero) based on GPU thresholds defined in the ScaledObject.
+1. **DaemonSet** — Runs on nodes labeled with `nvidia.com/gpu.present: "true"`.
+2. **NVML Bindings** — Directly reads Streaming Multiprocessor (SM) utilization and Frame Buffer Memory via `go-nvml` C-bindings.
+3. **gRPC Interface** — Implements `externalscaler.ExternalScalerServer` (`IsActive`, `StreamIsActive`, `GetMetricSpec`, `GetMetrics`) to natively integrate with the central KEDA operator.
+4. **ScaledObject Trigger** — Kubernetes deployments scale up/down (including to zero) based on GPU thresholds defined in the ScaledObject.
 
 ---
 
@@ -96,7 +102,17 @@ Instead of configuring raw metric thresholds, use a profile optimized for your w
 
 ## Quick Start
 
-### 1. Deploy the External Scaler
+### 1. Deploy the Scaler
+
+Deploy the DaemonSet and gRPC service into your cluster. (Ensure KEDA is already installed.)
+
+```bash
+kubectl apply -f deploy/manifests.yaml
+```
+
+This deploys a DaemonSet that runs on every GPU node in your cluster, plus a ClusterIP Service for KEDA to discover it.
+
+Or use Helm:
 
 ```bash
 helm install keda-gpu-scaler deploy/helm/keda-gpu-scaler \
@@ -104,29 +120,36 @@ helm install keda-gpu-scaler deploy/helm/keda-gpu-scaler \
   --set nodeSelector."nvidia\.com/gpu\.present"=true
 ```
 
-This deploys a DaemonSet that runs on every GPU node in your cluster.
+### 2. Attach to your AI Workload
 
-### 2. Create a ScaledObject
-
-Point your deployment at the scaler using a profile:
+Create a ScaledObject pointing to the external scaler service:
 
 ```yaml
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:
-  name: vllm-gpu-scaler
-  namespace: default
+  name: vllm-inference-scaler
+  namespace: ai-workloads
 spec:
   scaleTargetRef:
-    name: vllm-deployment          # Your LLM inference Deployment
-  minReplicaCount: 0                # Scale to zero when GPU is idle
-  maxReplicaCount: 8
-  cooldownPeriod: 60
+    name: vllm-deepseek-deployment
+  minReplicaCount: 1
+  maxReplicaCount: 50
   triggers:
     - type: external
       metadata:
         scalerAddress: "keda-gpu-scaler.keda.svc.cluster.local:6000"
-        profile: "vllm-inference"
+        targetGpuUtilization: "80"
+```
+
+Or use a pre-built profile:
+
+```yaml
+triggers:
+  - type: external
+    metadata:
+      scalerAddress: "keda-gpu-scaler.keda.svc.cluster.local:6000"
+      profile: "vllm-inference"
 ```
 
 ### 3. Custom Configuration
@@ -144,6 +167,8 @@ triggers:
       gpuIndex: "0"              # specific GPU index, or omit for all
       aggregation: "max"         # max, min, avg, sum across GPUs
 ```
+
+See `deploy/examples/` for ready-to-use ScaledObject manifests.
 
 ---
 
@@ -163,7 +188,9 @@ triggers:
 
 ---
 
-## Building from Source
+## Build it Yourself
+
+This project requires `CGO_ENABLED=1` to compile the NVIDIA C-bindings.
 
 ```bash
 # Build binary (requires CGO for NVML)
@@ -178,18 +205,25 @@ make lint
 # Generate protobuf Go code
 make proto
 
-# Build Docker image
-make docker-build
+# Build and push a release image
+make docker-release VERSION=v0.1.0
 
-# Lint Helm chart
-make helm-lint
+# Deploy to cluster
+make deploy
+```
+
+Or build the Docker image directly:
+
+```bash
+docker build -t your-registry/keda-gpu-scaler:v0.1.0 .
+docker push your-registry/keda-gpu-scaler:v0.1.0
 ```
 
 ---
 
 ## Contributing
 
-Contributions are welcome! If you are running into issues with specific GPU architectures or want to add support for AMD ROCm telemetry, please open an issue or submit a pull request. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+Contributions are welcome! If you are running massive LLM inference deployments and need custom NVML metric profiles (e.g., PCIe bandwidth triggers, temperature thresholds), or want to add support for AMD ROCm telemetry, please open an issue or submit a PR. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 

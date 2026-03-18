@@ -1,0 +1,27 @@
+# Example: ScaledObject for a vLLM inference deployment.
+#
+# This is the end-user experience — data scientists deploy their model
+# and attach this ScaledObject. No Prometheus, no DCGM, no PromQL.
+#
+# Prerequisites:
+#   - keda-gpu-scaler DaemonSet running (kubectl apply -f deploy/manifests.yaml)
+#   - KEDA v2.10+ installed
+#   - A Deployment named "vllm-deepseek-deployment" in the "ai-workloads" namespace
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: vllm-inference-scaler
+  namespace: ai-workloads
+spec:
+  scaleTargetRef:
+    name: vllm-deepseek-deployment
+  minReplicaCount: 1
+  maxReplicaCount: 50
+  cooldownPeriod: 60
+  triggers:
+    - type: external
+      metadata:
+        # Points to the Service created by deploy/manifests.yaml
+        scalerAddress: "keda-gpu-scaler.keda.svc.cluster.local:6000"
+        # Use the pre-built vLLM inference profile
+        profile: "vllm-inference"

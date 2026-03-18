@@ -1,0 +1,121 @@
+# Kubernetes manifests for keda-gpu-scaler
+# Deploys a DaemonSet on GPU nodes + a Service for KEDA operator discovery.
+#
+# Prerequisites:
+#   - KEDA v2.10+ installed (namespace: keda)
+#   - NVIDIA GPU drivers + Device Plugin on GPU worker nodes
+#   - Nodes labeled with nvidia.com/gpu.present=true
+#
+# Usage:
+#   kubectl apply -f deploy/manifests.yaml
+---
+# 1. Service — exposes the gRPC endpoint for the KEDA operator to target.
+#    This is a standard (not headless) ClusterIP service so that KEDA's
+#    external scaler trigger can resolve a single scalerAddress.
+apiVersion: v1
+kind: Service
+metadata:
+  name: keda-gpu-scaler
+  namespace: keda
+  labels:
+    app.kubernetes.io/name: keda-gpu-scaler
+    app.kubernetes.io/component: gpu-scaler
+    app.kubernetes.io/part-of: keda
+spec:
+  ports:
+    - port: 6000
+      targetPort: grpc
+      protocol: TCP
+      name: grpc
+  selector:
+    app.kubernetes.io/name: keda-gpu-scaler
+
+---
+# 2. DaemonSet — runs the Go NVML gRPC server on every GPU node.
+#    NVML requires local access to /dev/nvidiactl and libnvidia-ml.so,
+#    which is why this MUST be a DaemonSet (not a Deployment).
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: keda-gpu-scaler
+  namespace: keda
+  labels:
+    app.kubernetes.io/name: keda-gpu-scaler
+    app.kubernetes.io/component: gpu-scaler
+    app.kubernetes.io/part-of: keda
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: keda-gpu-scaler
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keda-gpu-scaler
+        app.kubernetes.io/component: gpu-scaler
+        app.kubernetes.io/part-of: keda
+    spec:
+      # CRITICAL: Only schedule on nodes that actually have NVIDIA GPUs.
+      nodeSelector:
+        nvidia.com/gpu.present: "true"
+      # Tolerate standard GPU taints so the pod is not rejected.
+      tolerations:
+        - key: "nvidia.com/gpu"
+          operator: "Exists"
+          effect: "NoSchedule"
+      serviceAccountName: default
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: keda-gpu-scaler
+          image: ghcr.io/pmady/keda-gpu-scaler:v0.1.0
+          imagePullPolicy: Always
+          args:
+            - "--port=6000"
+            - "--log-level=info"
+          ports:
+            - name: grpc
+              containerPort: 6000
+              protocol: TCP
+          # NVML requires root + access to the host's NVIDIA device files.
+          securityContext:
+            privileged: true
+            runAsUser: 0
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          livenessProbe:
+            grpc:
+              port: 6000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            grpc:
+              port: 6000
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          volumeMounts:
+            - name: dev-nvidiactl
+              mountPath: /dev/nvidiactl
+            - name: dev-nvidia-uvm
+              mountPath: /dev/nvidia-uvm
+            # nvidia-ml shared library from the host
+            - name: nvidia-driver
+              mountPath: /usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1
+              readOnly: true
+      volumes:
+        - name: dev-nvidiactl
+          hostPath:
+            path: /dev/nvidiactl
+        - name: dev-nvidia-uvm
+          hostPath:
+            path: /dev/nvidia-uvm
+        - name: nvidia-driver
+          hostPath:
+            path: /usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1

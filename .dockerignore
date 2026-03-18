@@ -1,0 +1,10 @@
+.git
+.github
+.gitignore
+bin/
+deploy/
+docs/
+*.md
+LICENSE
+Makefile
+keda-gpu-scaler

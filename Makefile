@@ -1,8 +1,9 @@
-.PHONY: build proto test lint clean docker-build docker-push help
+.PHONY: build proto test lint clean docker-build docker-push docker-release deploy undeploy help
 
 BINARY_NAME := keda-gpu-scaler
 IMAGE_REPO := ghcr.io/pmady/keda-gpu-scaler
 IMAGE_TAG ?= latest
+VERSION ?= v0.1.0
 GOPATH := $(shell go env GOPATH)
 
 help: ## Show this help
@@ -30,6 +31,18 @@ docker-build: ## Build Docker image
 
 docker-push: ## Push Docker image
 	docker push $(IMAGE_REPO):$(IMAGE_TAG)
+
+docker-release: ## Build, tag, and push a release image (use VERSION=v0.1.0)
+	docker build -t $(IMAGE_REPO):$(VERSION) .
+	docker tag $(IMAGE_REPO):$(VERSION) $(IMAGE_REPO):latest
+	docker push $(IMAGE_REPO):$(VERSION)
+	docker push $(IMAGE_REPO):latest
+
+deploy: ## Deploy DaemonSet and Service to the cluster
+	kubectl apply -f deploy/manifests.yaml
+
+undeploy: ## Remove DaemonSet and Service from the cluster
+	kubectl delete -f deploy/manifests.yaml --ignore-not-found
 
 tidy: ## Tidy Go modules
 	go mod tidy
