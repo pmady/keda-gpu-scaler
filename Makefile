@@ -1,4 +1,4 @@
-.PHONY: build proto test lint clean docker-build docker-push docker-release deploy undeploy help
+.PHONY: build proto test test-e2e lint clean docker-build docker-push docker-release deploy undeploy helm-lint helm-template helm-test help
 
 BINARY_NAME := keda-gpu-scaler
 IMAGE_REPO := ghcr.io/pmady/keda-gpu-scaler
@@ -19,6 +19,9 @@ proto: ## Generate protobuf Go code
 
 test: ## Run unit tests
 	go test -v -race ./pkg/...
+
+test-e2e: ## Run e2e integration tests (no GPU required — uses mock collector)
+	go test -v -tags=e2e -race ./tests/e2e/...
 
 lint: ## Run linter
 	golangci-lint run ./...
@@ -52,3 +55,9 @@ helm-lint: ## Lint Helm chart
 
 helm-template: ## Render Helm templates
 	helm template keda-gpu-scaler deploy/helm/keda-gpu-scaler
+
+helm-test: ## Validate Helm chart renders correctly with default and custom values
+	helm lint deploy/helm/keda-gpu-scaler
+	helm template keda-gpu-scaler deploy/helm/keda-gpu-scaler > /dev/null
+	helm template keda-gpu-scaler deploy/helm/keda-gpu-scaler --set grpc.port=50051 --set logLevel=debug > /dev/null
+	@echo "Helm chart validation passed"

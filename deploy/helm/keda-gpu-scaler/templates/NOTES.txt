@@ -1,0 +1,24 @@
+keda-gpu-scaler has been deployed as a DaemonSet on GPU nodes.
+
+  Service:  {{ include "keda-gpu-scaler.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local
+  gRPC Port: {{ .Values.grpc.port }}
+
+To use with KEDA, create a ScaledObject with an external trigger:
+
+  triggers:
+    - type: external
+      metadata:
+        scalerAddress: "{{ include "keda-gpu-scaler.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.grpc.port }}"
+        profile: "vllm-inference"
+
+Available profiles: vllm-inference, triton-inference, training, batch
+
+Verify the scaler pods are running on GPU nodes:
+
+  kubectl get pods -n {{ .Release.Namespace }} -l {{ include "keda-gpu-scaler.selectorLabels" . | replace ": " "=" | replace "\n" "," }}
+
+Check gRPC health:
+
+  kubectl exec -n {{ .Release.Namespace }} <pod-name> -- grpc_health_probe -addr=:{{ .Values.grpc.port }}
+
+Documentation: https://github.com/pmady/keda-gpu-scaler

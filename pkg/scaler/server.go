@@ -32,12 +32,12 @@ import (
 // GPUExternalScaler implements the KEDA ExternalScaler gRPC interface.
 type GPUExternalScaler struct {
 	pb.UnimplementedExternalScalerServer
-	collector *gpu.Collector
+	collector gpu.MetricsCollector
 	logger    *zap.Logger
 }
 
 // NewGPUExternalScaler creates a new GPU external scaler server.
-func NewGPUExternalScaler(collector *gpu.Collector, logger *zap.Logger) *GPUExternalScaler {
+func NewGPUExternalScaler(collector gpu.MetricsCollector, logger *zap.Logger) *GPUExternalScaler {
 	return &GPUExternalScaler{
 		collector: collector,
 		logger:    logger,
