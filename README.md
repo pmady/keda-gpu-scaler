@@ -1,28 +1,46 @@
-# KEDA NVML GPU Scaler
+# KEDA GPU Scaler
+
+**Scale Kubernetes GPU workloads from real hardware metrics. No Prometheus. No DCGM. No PromQL.**
 
 [![CI](https://github.com/pmady/keda-gpu-scaler/actions/workflows/ci.yaml/badge.svg)](https://github.com/pmady/keda-gpu-scaler/actions/workflows/ci.yaml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/pmady/keda-gpu-scaler)](https://goreportcard.com/report/github.com/pmady/keda-gpu-scaler)
+[![GitHub stars](https://img.shields.io/github/stars/pmady/keda-gpu-scaler?style=social)](https://github.com/pmady/keda-gpu-scaler/stargazers)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 ![KEDA: v2.10+](https://img.shields.io/badge/KEDA-v2.10%2B-orange)
 ![Kubernetes: v1.24+](https://img.shields.io/badge/Kubernetes-v1.24%2B-blue)
-![Go: 1.25+](https://img.shields.io/badge/Go-1.25%2B-00ADD8)
 
-A native, high-performance [External Scaler](https://keda.sh/docs/latest/concepts/external-scalers/) for [KEDA](https://keda.sh/) that scales AI/ML workloads directly using NVIDIA Management Library (NVML) C-bindings.
+A [KEDA External Scaler](https://keda.sh/docs/latest/concepts/external-scalers/) that reads NVIDIA GPU metrics directly from NVML C-bindings and autoscales your vLLM, Triton, and custom inference deployments — including scale-to-zero.
 
-Bypass Prometheus, eliminate metric scraping latency, and scale your vLLM, Triton, and custom inference pods based on true, real-time GPU hardware utilization.
+### What it does in 30 seconds
+
+```
+GPU Node                          KEDA Operator
+┌─────────────────────┐           ┌──────────────────┐
+│ keda-gpu-scaler     │──gRPC───> │ External Scaler  │
+│ (DaemonSet)         │           │ trigger           │
+│                     │           └────────┬─────────┘
+│ NVML: 92% GPU util  │                    │
+│ NVML: 14.2GB VRAM   │           Scale vllm-deployment
+└─────────────────────┘           from 3 → 8 replicas
+```
 
 ---
 
-## The Problem with Standard GPU Scaling
+## Why This Exists
 
-Scaling massive AI inference workloads (like DeepSeek or Llama 3) on Kubernetes using standard CPU/Memory HPA is fundamentally broken. GPU nodes often sit at 10% CPU utilization while the physical GPUs are 100% saturated with 200+ pending requests in the vLLM queue.
+Scaling AI inference on Kubernetes using CPU/Memory HPA is broken. Your GPU nodes sit at 10% CPU while the GPUs are 100% saturated with 200+ pending requests in the vLLM queue.
 
-While you can work around this by deploying `dcgm-exporter` and using the KEDA Prometheus scaler, it introduces significant architecture bloat:
+The standard workaround — dcgm-exporter + Prometheus + KEDA Prometheus scaler — works but adds significant operational overhead:
 
-- **PromQL queries are brittle** and framework-dependent.
-- **Scraping intervals introduce scaling latency**, often 15-30 seconds late.
-- It requires maintaining a **centralized Prometheus server** just to read local node hardware states.
+```
+BEFORE: GPU Pod → dcgm-exporter → Prometheus → PromQL → KEDA → HPA
+        (5 components, 15-30s scrape delay, PromQL queries break on upgrades)
 
-**keda-gpu-scaler eliminates that entire stack** — it reads GPU metrics directly from NVML on each node and serves them to KEDA over gRPC.
+AFTER:  GPU Pod → keda-gpu-scaler (NVML) → KEDA → HPA
+        (2 components, sub-second metrics, zero configuration)
+```
+
+**keda-gpu-scaler eliminates the entire metrics pipeline** — it reads GPU state directly from the hardware on each node and serves it to KEDA over gRPC.
 
 ### Why Not a Native KEDA Scaler?
 
@@ -221,9 +239,34 @@ docker push your-registry/keda-gpu-scaler:v0.1.0
 
 ---
 
+## How It Compares
+
+| | keda-gpu-scaler | dcgm-exporter + Prometheus | Custom Metrics API |
+|---|---|---|---|
+| **Components** | 1 DaemonSet | dcgm-exporter + Prometheus + adapter | Custom metrics server |
+| **Metric latency** | Sub-second (direct NVML) | 15-30s (scrape interval) | Depends on implementation |
+| **Scale-to-zero** | Yes (KEDA native) | Yes (with KEDA Prometheus scaler) | Manual |
+| **Configuration** | 3-line ScaledObject | PromQL query per metric | Custom code |
+| **GPU metrics** | 6 hardware metrics | 50+ DCGM metrics | Whatever you build |
+| **Dependencies** | KEDA, NVIDIA drivers | KEDA, Prometheus, dcgm-exporter | Varies |
+| **Failure domain** | Node-local | Centralized Prometheus | Varies |
+
+---
+
+## Roadmap
+
+- [ ] AMD ROCm support via `rocm-smi` bindings
+- [ ] Multi-Instance GPU (MIG) per-instance metrics
+- [ ] PCIe bandwidth and NVLink utilization metrics
+- [ ] Inference-framework-aware scaling (vLLM queue depth via engine API)
+- [ ] Grafana dashboard for GPU fleet visibility
+- [ ] OCI/OKE optimized deployment guide
+
+---
+
 ## Contributing
 
-Contributions are welcome! If you are running massive LLM inference deployments and need custom NVML metric profiles (e.g., PCIe bandwidth triggers, temperature thresholds), or want to add support for AMD ROCm telemetry, please open an issue or submit a PR. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+Contributions welcome! Whether you're running vLLM on A100s, Triton on H100s, or training on a home lab 4090 — if you have a GPU scaling use case, open an issue or PR. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
