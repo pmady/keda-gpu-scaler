@@ -17,7 +17,7 @@ A [KEDA External Scaler](https://keda.sh/docs/latest/concepts/external-scalers/)
 GPU Node                          KEDA Operator
 ┌─────────────────────┐           ┌──────────────────┐
 │ keda-gpu-scaler     │──gRPC───> │ External Scaler  │
-│ (DaemonSet)         │           │ trigger           │
+│ (DaemonSet)         │           │ trigger          │
 │                     │           └────────┬─────────┘
 │ NVML: 92% GPU util  │                    │
 │ NVML: 14.2GB VRAM   │           Scale vllm-deployment
@@ -72,7 +72,7 @@ This design is documented in [KEDA issue #7538](https://github.com/kedacore/keda
 │  KEDA       │                                            │
 │   ┌─────────▼──────────┐      ┌────────────────────────┐ │
 │   │  External Scaler   │─────►│  HPA (scale up/down)   │ │
-│   │  trigger            │      │  your-vllm-deployment  │ │
+│   │  trigger           │      │  your-vllm-deployment  │ │
 │   └────────────────────┘      └────────────────────────┘ │
 └──────────────────────────────────────────────────────────┘
 ```
