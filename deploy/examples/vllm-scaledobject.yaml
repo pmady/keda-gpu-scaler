@@ -1,7 +1,5 @@
-# Example: ScaledObject for a vLLM inference deployment.
-#
-# This is the end-user experience — data scientists deploy their model
-# and attach this ScaledObject. No Prometheus, no DCGM, no PromQL.
+# Example: ScaledObject for a vLLM inference deployment using the
+# pre-built vllm-inference profile.
 #
 # Prerequisites:
 #   - keda-gpu-scaler DaemonSet running (kubectl apply -f deploy/manifests.yaml)

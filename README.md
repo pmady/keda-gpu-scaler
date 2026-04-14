@@ -266,7 +266,7 @@ docker push your-registry/keda-gpu-scaler:v0.1.0
 
 ## Contributing
 
-Contributions welcome! Whether you're running vLLM on A100s, Triton on H100s, or training on a home lab 4090 — if you have a GPU scaling use case, open an issue or PR. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+Contributions welcome. If you have a GPU autoscaling use case or want to add vendor support (AMD ROCm, Intel), open an issue or PR. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

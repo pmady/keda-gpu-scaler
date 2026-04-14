@@ -1,6 +1,6 @@
 # Contributing to keda-gpu-scaler
 
-Thank you for your interest in contributing! This project welcomes contributions from everyone.
+Contributions are welcome.
 
 ## Getting Started
 

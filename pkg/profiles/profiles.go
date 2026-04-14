@@ -46,7 +46,7 @@ var builtinProfiles = map[string]Profile{
 	"vllm-inference": {
 		Name:               "vllm-inference",
 		MetricName:         "keda_gpu_vllm_inference",
-		Description:        "Scale vLLM inference deployments based on GPU memory utilization with scale-to-zero support",
+		Description:        "vLLM / LLM serving — memory-based, supports scale-to-zero",
 		TargetValue:        80,
 		ActivationValue:    5,
 		MetricType:         MetricMemoryUsedPercent,
@@ -57,7 +57,7 @@ var builtinProfiles = map[string]Profile{
 	"triton-inference": {
 		Name:               "triton-inference",
 		MetricName:         "keda_gpu_triton_inference",
-		Description:        "Scale Triton Inference Server based on GPU compute utilization",
+		Description:        "Triton Inference Server — GPU compute utilization",
 		TargetValue:        75,
 		ActivationValue:    10,
 		MetricType:         MetricGPUUtilization,
@@ -68,7 +68,7 @@ var builtinProfiles = map[string]Profile{
 	"training": {
 		Name:               "training",
 		MetricName:         "keda_gpu_training",
-		Description:        "Scale training jobs based on GPU compute utilization (no scale-to-zero)",
+		Description:        "Training jobs — high GPU util target, no scale-to-zero",
 		TargetValue:        90,
 		ActivationValue:    0,
 		MetricType:         MetricGPUUtilization,
@@ -79,7 +79,7 @@ var builtinProfiles = map[string]Profile{
 	"batch": {
 		Name:               "batch",
 		MetricName:         "keda_gpu_batch",
-		Description:        "Scale batch inference workloads with aggressive scale-to-zero",
+		Description:        "Batch inference — aggressive scale-down and scale-to-zero",
 		TargetValue:        70,
 		ActivationValue:    1,
 		MetricType:         MetricMemoryUsedPercent,

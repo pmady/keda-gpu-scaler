@@ -9,9 +9,7 @@
 # Usage:
 #   kubectl apply -f deploy/manifests.yaml
 ---
-# 1. Service — exposes the gRPC endpoint for the KEDA operator to target.
-#    This is a standard (not headless) ClusterIP service so that KEDA's
-#    external scaler trigger can resolve a single scalerAddress.
+# 1. Service — ClusterIP for KEDA to discover the gRPC scaler.
 apiVersion: v1
 kind: Service
 metadata:
