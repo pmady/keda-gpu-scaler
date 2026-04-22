@@ -21,7 +21,6 @@ package e2e
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"testing"
 	"time"
@@ -37,8 +36,6 @@ import (
 	"github.com/pmady/keda-gpu-scaler/pkg/scaler"
 )
 
-// startTestServer starts a gRPC server with the given mock devices and returns
-// the address and a cleanup function.
 func startTestServer(t *testing.T, devices []gpu.Metrics) (string, func()) {
 	t.Helper()
 
@@ -82,7 +79,6 @@ func dialScaler(t *testing.T, addr string) (*grpc.ClientConn, pb.ExternalScalerC
 	return conn, pb.NewExternalScalerClient(conn)
 }
 
-// TestHealthCheck verifies the gRPC health check endpoint responds SERVING.
 func TestHealthCheck(t *testing.T) {
 	devices := []gpu.Metrics{
 		{Index: 0, GPUUtilization: 50, MemoryUsedMiB: 4096, MemoryTotalMiB: 8192},
@@ -112,7 +108,6 @@ func TestHealthCheck(t *testing.T) {
 	}
 }
 
-// TestIsActive verifies IsActive returns true when GPU utilization exceeds the activation threshold.
 func TestIsActive(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -181,7 +176,6 @@ func TestIsActive(t *testing.T) {
 	}
 }
 
-// TestGetMetricSpec verifies GetMetricSpec returns correct metric name and target value.
 func TestGetMetricSpec(t *testing.T) {
 	devices := []gpu.Metrics{
 		{Index: 0, GPUUtilization: 75},
@@ -245,7 +239,6 @@ func TestGetMetricSpec(t *testing.T) {
 	}
 }
 
-// TestGetMetrics verifies GetMetrics returns correct GPU metric values.
 func TestGetMetrics(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -338,11 +331,9 @@ func TestGetMetrics(t *testing.T) {
 	}
 }
 
-// TestScaleOutScaleIn simulates KEDA's scaling decision loop:
-// 1. Start with high GPU utilization → scaler reports active + high metric
-// 2. Drop GPU utilization → scaler reports inactive + low metric
+// Spin up a hot server, check it reports active + high metric,
+// then swap to a cold server and confirm it flips.
 func TestScaleOutScaleIn(t *testing.T) {
-	// Phase 1: High utilization — should trigger scale out
 	highDevices := []gpu.Metrics{
 		{Index: 0, GPUUtilization: 95, MemoryUsedMiB: 7500, MemoryTotalMiB: 8192},
 		{Index: 1, GPUUtilization: 88, MemoryUsedMiB: 7000, MemoryTotalMiB: 8192},
@@ -387,13 +378,13 @@ func TestScaleOutScaleIn(t *testing.T) {
 	if highValue <= 80 {
 		t.Errorf("expected metric > 80 (target) for scale-out, got %v", highValue)
 	}
-	t.Logf("Phase 1 (scale-out): metric=%v (max GPU util), target=80 → HPA would scale out", highValue)
+	t.Logf("high phase: metric=%v", highValue)
 
 	cancel()
 	conn.Close()
 	cleanup()
 
-	// Phase 2: Low utilization — should trigger scale in
+	// now swap to idle GPUs
 	lowDevices := []gpu.Metrics{
 		{Index: 0, GPUUtilization: 5, MemoryUsedMiB: 500, MemoryTotalMiB: 8192},
 		{Index: 1, GPUUtilization: 3, MemoryUsedMiB: 400, MemoryTotalMiB: 8192},
@@ -436,10 +427,10 @@ func TestScaleOutScaleIn(t *testing.T) {
 	if lowValue >= 80 {
 		t.Errorf("expected metric < 80 (target) for scale-in, got %v", lowValue)
 	}
-	t.Logf("Phase 2 (scale-in): metric=%v (max GPU util), target=80 → HPA would scale in", lowValue)
+	t.Logf("low phase: metric=%v", lowValue)
 }
 
-// TestAllProfiles verifies that every pre-built profile produces valid gRPC responses.
+// Smoke-test all profiles: call IsActive, GetMetricSpec, GetMetrics.
 func TestAllProfiles(t *testing.T) {
 	devices := []gpu.Metrics{
 		{
@@ -465,7 +456,7 @@ func TestAllProfiles(t *testing.T) {
 	defer conn.Close()
 
 	for _, profile := range profileNames {
-		t.Run(fmt.Sprintf("profile-%s", profile), func(t *testing.T) {
+		t.Run(profile, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
@@ -503,12 +494,184 @@ func TestAllProfiles(t *testing.T) {
 				t.Errorf("expected 1 metric value for %s, got %d", profile, len(metricsResp.MetricValues))
 			}
 
-			t.Logf("profile=%s metric=%s value=%v target=%v",
+			t.Logf("%s: val=%v target=%v",
 				profile,
-				specResp.MetricSpecs[0].MetricName,
 				metricsResp.MetricValues[0].MetricValueFloat,
 				specResp.MetricSpecs[0].TargetSizeFloat,
 			)
 		})
+	}
+}
+
+func TestBadMetadata(t *testing.T) {
+	devices := []gpu.Metrics{
+		{Index: 0, GPUUtilization: 50},
+	}
+	addr, cleanup := startTestServer(t, devices)
+	defer cleanup()
+
+	conn, client := dialScaler(t, addr)
+	defer conn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	badCases := []struct {
+		name     string
+		metadata map[string]string
+	}{
+		{"bogus profile", map[string]string{"profile": "doesnt-exist"}},
+		{"non-numeric targetValue", map[string]string{"targetValue": "abc"}},
+		{"non-numeric gpuIndex", map[string]string{"gpuIndex": "xyz"}},
+		{"bad aggregation", map[string]string{"aggregation": "median"}},
+	}
+
+	for _, tc := range badCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := client.IsActive(ctx, &pb.ScaledObjectRef{
+				Name:           "bad",
+				Namespace:      "default",
+				ScalerMetadata: tc.metadata,
+			})
+			if err == nil {
+				t.Errorf("expected error for metadata %v, got nil", tc.metadata)
+			}
+		})
+	}
+}
+
+func TestStreamIsActive(t *testing.T) {
+	devices := []gpu.Metrics{
+		{Index: 0, GPUUtilization: 60, MemoryUsedMiB: 4096, MemoryTotalMiB: 8192},
+	}
+	addr, cleanup := startTestServer(t, devices)
+	defer cleanup()
+
+	conn, client := dialScaler(t, addr)
+	defer conn.Close()
+
+	// short poll so we don't wait forever
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	stream, err := client.StreamIsActive(ctx, &pb.ScaledObjectRef{
+		Name:      "stream-test",
+		Namespace: "default",
+		ScalerMetadata: map[string]string{
+			"pollIntervalSeconds": "1",
+		},
+	})
+	if err != nil {
+		t.Fatalf("StreamIsActive call failed: %v", err)
+	}
+
+	// read at least one message
+	resp, err := stream.Recv()
+	if err != nil {
+		t.Fatalf("stream recv failed: %v", err)
+	}
+	// 60 > 0 (default activation), should be active
+	if !resp.Result {
+		t.Errorf("expected stream to report active, got false")
+	}
+}
+
+// gpuIndex out of range should error from the mock collector
+func TestGpuIndexOutOfRange(t *testing.T) {
+	devices := []gpu.Metrics{
+		{Index: 0, GPUUtilization: 50},
+	}
+	addr, cleanup := startTestServer(t, devices)
+	defer cleanup()
+
+	conn, client := dialScaler(t, addr)
+	defer conn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err := client.GetMetrics(ctx, &pb.GetMetricsRequest{
+		ScaledObjectRef: &pb.ScaledObjectRef{
+			Name:      "oob-test",
+			Namespace: "default",
+			ScalerMetadata: map[string]string{
+				"gpuIndex": "99",
+			},
+		},
+		MetricName: "keda_gpu_metric",
+	})
+	if err == nil {
+		t.Error("expected error for gpuIndex=99 with 1 device, got nil")
+	}
+}
+
+// min aggregation across 4 GPUs
+func TestAggregationMin(t *testing.T) {
+	devices := []gpu.Metrics{
+		{Index: 0, GPUUtilization: 80},
+		{Index: 1, GPUUtilization: 40},
+		{Index: 2, GPUUtilization: 90},
+		{Index: 3, GPUUtilization: 55},
+	}
+	addr, cleanup := startTestServer(t, devices)
+	defer cleanup()
+
+	conn, client := dialScaler(t, addr)
+	defer conn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := client.GetMetrics(ctx, &pb.GetMetricsRequest{
+		ScaledObjectRef: &pb.ScaledObjectRef{
+			Name:      "min-test",
+			Namespace: "default",
+			ScalerMetadata: map[string]string{
+				"aggregation": "min",
+			},
+		},
+		MetricName: "keda_gpu_metric",
+	})
+	if err != nil {
+		t.Fatalf("GetMetrics failed: %v", err)
+	}
+	got := resp.MetricValues[0].MetricValueFloat
+	if got != 40 {
+		t.Errorf("min aggregation = %v, want 40", got)
+	}
+}
+
+// sum aggregation
+func TestAggregationSum(t *testing.T) {
+	devices := []gpu.Metrics{
+		{Index: 0, GPUUtilization: 20},
+		{Index: 1, GPUUtilization: 30},
+		{Index: 2, GPUUtilization: 50},
+	}
+	addr, cleanup := startTestServer(t, devices)
+	defer cleanup()
+
+	conn, client := dialScaler(t, addr)
+	defer conn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := client.GetMetrics(ctx, &pb.GetMetricsRequest{
+		ScaledObjectRef: &pb.ScaledObjectRef{
+			Name:      "sum-test",
+			Namespace: "default",
+			ScalerMetadata: map[string]string{
+				"aggregation": "sum",
+			},
+		},
+		MetricName: "keda_gpu_metric",
+	})
+	if err != nil {
+		t.Fatalf("GetMetrics failed: %v", err)
+	}
+	got := resp.MetricValues[0].MetricValueFloat
+	if got != 100 {
+		t.Errorf("sum aggregation = %v, want 100", got)
 	}
 }
