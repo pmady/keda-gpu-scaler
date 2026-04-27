@@ -349,7 +349,6 @@ func TestScaleOutScaleIn(t *testing.T) {
 		"targetValue":         "80",
 	}
 
-	// Verify IsActive → true
 	activeResp, err := client.IsActive(ctx, &pb.ScaledObjectRef{
 		Name:           "vllm-deployment",
 		Namespace:      "inference",
@@ -362,7 +361,6 @@ func TestScaleOutScaleIn(t *testing.T) {
 		t.Error("expected IsActive=true during high utilization")
 	}
 
-	// Verify metric value > target → HPA scales out
 	metricsResp, err := client.GetMetrics(ctx, &pb.GetMetricsRequest{
 		ScaledObjectRef: &pb.ScaledObjectRef{
 			Name:           "vllm-deployment",
@@ -398,7 +396,6 @@ func TestScaleOutScaleIn(t *testing.T) {
 	ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel2()
 
-	// Verify IsActive → false (below activation threshold of 10)
 	activeResp2, err := client2.IsActive(ctx2, &pb.ScaledObjectRef{
 		Name:           "vllm-deployment",
 		Namespace:      "inference",
@@ -411,7 +408,6 @@ func TestScaleOutScaleIn(t *testing.T) {
 		t.Error("expected IsActive=false during low utilization")
 	}
 
-	// Verify metric value < target → HPA scales in
 	metricsResp2, err := client2.GetMetrics(ctx2, &pb.GetMetricsRequest{
 		ScaledObjectRef: &pb.ScaledObjectRef{
 			Name:           "vllm-deployment",
@@ -467,13 +463,11 @@ func TestAllProfiles(t *testing.T) {
 				ScalerMetadata: metadata,
 			}
 
-			// IsActive should not error
 			_, err := client.IsActive(ctx, ref)
 			if err != nil {
 				t.Errorf("IsActive failed for profile %s: %v", profile, err)
 			}
 
-			// GetMetricSpec should return exactly one spec
 			specResp, err := client.GetMetricSpec(ctx, ref)
 			if err != nil {
 				t.Errorf("GetMetricSpec failed for profile %s: %v", profile, err)
@@ -482,7 +476,6 @@ func TestAllProfiles(t *testing.T) {
 				t.Errorf("expected 1 metric spec for %s, got %d", profile, len(specResp.MetricSpecs))
 			}
 
-			// GetMetrics should return exactly one value
 			metricsResp, err := client.GetMetrics(ctx, &pb.GetMetricsRequest{
 				ScaledObjectRef: ref,
 				MetricName:      specResp.MetricSpecs[0].MetricName,

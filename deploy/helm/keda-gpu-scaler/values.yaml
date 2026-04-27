@@ -1,5 +1,3 @@
-replicaCount: 1
-
 image:
   repository: ghcr.io/pmady/keda-gpu-scaler
   pullPolicy: IfNotPresent
@@ -14,6 +12,8 @@ serviceAccount:
   annotations: {}
   name: ""
 
+podAnnotations: {}
+
 service:
   type: ClusterIP
   port: 6000
@@ -23,7 +23,6 @@ grpc:
 
 logLevel: info
 
-# GPU node selector — deploy only on nodes with NVIDIA GPUs
 nodeSelector:
   nvidia.com/gpu.present: "true"
 
@@ -42,5 +41,26 @@ resources:
     cpu: 100m
     memory: 64Mi
 
-# NVIDIA runtime class (if using containerd with NVIDIA runtime)
+# NVML needs privileged access to GPU devices
+securityContext:
+  privileged: true
+  runAsUser: 0
+
+# NVIDIA container runtime handles device mounts automatically.
+# Set to "" if your cluster doesn't have the nvidia runtime class.
 runtimeClassName: nvidia
+
+# For clusters WITHOUT the nvidia runtime class, enable hostPath
+# mounts so NVML can reach the GPU device files directly.
+nvmlHostMounts:
+  enabled: false
+  nvidiactl: /dev/nvidiactl
+  nvidiaUvm: /dev/nvidia-uvm
+  nvmlLib: /usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1
+
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+
+terminationGracePeriodSeconds: 30

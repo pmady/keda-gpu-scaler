@@ -1,6 +1,6 @@
 apiVersion: v2
 name: keda-gpu-scaler
-description: KEDA External gRPC Scaler for GPU workloads — native NVML metrics via DaemonSet
+description: KEDA external scaler that reads GPU metrics via NVML
 type: application
 version: 0.1.0
 appVersion: "0.1.0"

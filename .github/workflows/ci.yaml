@@ -26,6 +26,19 @@ jobs:
       - name: Test
         run: go test -v -race ./pkg/...
 
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: E2E tests
+        run: go test -v -tags=e2e -race -count=1 ./tests/e2e/
+
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -54,7 +67,7 @@ jobs:
 
   docker:
     runs-on: ubuntu-latest
-    needs: [build, lint]
+    needs: [build, e2e, lint]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: read

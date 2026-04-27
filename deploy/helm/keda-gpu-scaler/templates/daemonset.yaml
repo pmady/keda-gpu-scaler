@@ -8,8 +8,14 @@ spec:
   selector:
     matchLabels:
       {{- include "keda-gpu-scaler.selectorLabels" . | nindent 6 }}
+  updateStrategy:
+    {{- toYaml .Values.updateStrategy | nindent 4 }}
   template:
     metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       labels:
         {{- include "keda-gpu-scaler.selectorLabels" . | nindent 8 }}
     spec:
@@ -18,6 +24,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "keda-gpu-scaler.serviceAccountName" . }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       {{- if .Values.runtimeClassName }}
       runtimeClassName: {{ .Values.runtimeClassName }}
       {{- end }}
@@ -32,6 +39,8 @@ spec:
             - name: grpc
               containerPort: {{ .Values.grpc.port }}
               protocol: TCP
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
           livenessProbe:
             grpc:
               port: {{ .Values.grpc.port }}
@@ -44,6 +53,28 @@ spec:
             periodSeconds: 10
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+          {{- if .Values.nvmlHostMounts.enabled }}
+          volumeMounts:
+            - name: dev-nvidiactl
+              mountPath: {{ .Values.nvmlHostMounts.nvidiactl }}
+            - name: dev-nvidia-uvm
+              mountPath: {{ .Values.nvmlHostMounts.nvidiaUvm }}
+            - name: nvidia-ml
+              mountPath: {{ .Values.nvmlHostMounts.nvmlLib }}
+              readOnly: true
+          {{- end }}
+      {{- if .Values.nvmlHostMounts.enabled }}
+      volumes:
+        - name: dev-nvidiactl
+          hostPath:
+            path: {{ .Values.nvmlHostMounts.nvidiactl }}
+        - name: dev-nvidia-uvm
+          hostPath:
+            path: {{ .Values.nvmlHostMounts.nvidiaUvm }}
+        - name: nvidia-ml
+          hostPath:
+            path: {{ .Values.nvmlHostMounts.nvmlLib }}
+      {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
