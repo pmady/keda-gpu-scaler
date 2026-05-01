@@ -253,6 +253,12 @@ docker push your-registry/keda-gpu-scaler:v0.1.0
 
 ---
 
+## Featured In
+
+- **[Abstracting AI Infrastructure: Native GPU Scaling for Internal Developer Platforms](https://platformengineering.com/contributed-content/abstracting-ai-infrastructure-native-gpu-scaling-for-internal-developer-platforms/)** — Platform Engineering (May 2026)
+
+---
+
 ## Roadmap
 
 - [ ] AMD ROCm support via `rocm-smi` bindings
