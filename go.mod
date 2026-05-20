@@ -4,7 +4,7 @@ go 1.25.5
 
 require (
 	github.com/NVIDIA/go-nvml v0.13.0-1
-	go.uber.org/zap v1.27.1
+	go.uber.org/zap v1.28.0
 	google.golang.org/grpc v1.79.2
 	google.golang.org/protobuf v1.36.11
 )
