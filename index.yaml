@@ -1,0 +1,36 @@
+apiVersion: v1
+entries:
+  keda-gpu-scaler:
+  - annotations:
+      artifacthub.io/license: Apache-2.0
+      artifacthub.io/links: |
+        - name: Documentation
+          url: https://keda-gpu-scaler.readthedocs.io/en/latest/
+        - name: KEDA Issue
+          url: https://github.com/kedacore/keda/issues/7538
+    apiVersion: v2
+    appVersion: 0.1.0
+    created: "2026-05-20T21:20:41.286706-05:00"
+    description: KEDA external scaler that reads GPU metrics via NVML
+    digest: 87a85893deec209e4e848fb7c6f414d018207ed12d14a0a93b68037a6b97d5e0
+    home: https://github.com/pmady/keda-gpu-scaler
+    keywords:
+    - keda
+    - gpu
+    - nvidia
+    - nvml
+    - autoscaling
+    - inference
+    - vllm
+    - triton
+    maintainers:
+    - email: pavan4devops@gmail.com
+      name: Pavan Madduri
+    name: keda-gpu-scaler
+    sources:
+    - https://github.com/pmady/keda-gpu-scaler
+    type: application
+    urls:
+    - https://pmady.github.io/keda-gpu-scaler/keda-gpu-scaler-0.1.0.tgz
+    version: 0.1.0
+generated: "2026-05-20T21:20:41.285758-05:00"
