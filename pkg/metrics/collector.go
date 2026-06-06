@@ -45,6 +45,7 @@ func (ic *InstrumentedCollector) CollectAll() ([]gpu.Metrics, error) {
 		return nil, err
 	}
 
+	GPUDeviceCount.Set(float64(len(all)))
 	for _, m := range all {
 		recordGauges(m)
 	}

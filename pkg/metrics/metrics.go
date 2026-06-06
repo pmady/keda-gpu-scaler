@@ -42,6 +42,12 @@ var (
 		Buckets:   prometheus.DefBuckets,
 	})
 
+	GPUDeviceCount = prometheus.NewGauge(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "gpu_device_count",
+		Help:      "Number of GPU devices detected on this node.",
+	})
+
 	GPUUtilization = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "gpu_utilization_percent",
@@ -90,6 +96,7 @@ func Register(reg prometheus.Registerer) {
 		CollectionsTotal,
 		CollectionErrorsTotal,
 		CollectionDuration,
+		GPUDeviceCount,
 		GPUUtilization,
 		GPUMemoryUsedBytes,
 		GPUMemoryTotalBytes,
