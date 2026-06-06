@@ -11,15 +11,9 @@ spec:
       targetPort: grpc
       protocol: TCP
       name: grpc
-    {{- if .Values.metrics.enabled }}
     - port: {{ .Values.metrics.port }}
       targetPort: metrics
       protocol: TCP
       name: metrics
-    {{- end }}
-    - port: {{ .Values.healthCheck.port }}
-      targetPort: health
-      protocol: TCP
-      name: health
   selector:
     {{- include "keda-gpu-scaler.selectorLabels" . | nindent 4 }}

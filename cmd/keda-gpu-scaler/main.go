@@ -43,8 +43,7 @@ import (
 
 var (
 	port        = flag.Int("port", 6000, "gRPC server port")
-	metricsPort = flag.Int("metrics-port", 9090, "Prometheus metrics HTTP port (0 to disable)")
-	healthPort  = flag.Int("health-port", 8081, "HTTP health check port (/healthz liveness, /readyz readiness)")
+	metricsPort = flag.Int("metrics-port", 9090, "HTTP port for /metrics, /healthz, /readyz (0 disables /metrics but health endpoints stay on 9090)")
 	logLevel    = flag.String("log-level", "info", "Log level (debug, info, warn, error)")
 )
 
@@ -54,10 +53,16 @@ func main() {
 	logger := initLogger(*logLevel)
 	defer func() { _ = logger.Sync() }()
 
+	// httpPort is the port for /healthz, /readyz, and /metrics.
+	// If metrics-port=0 (metrics disabled), health endpoints still need a port.
+	httpPort := *metricsPort
+	if httpPort == 0 {
+		httpPort = 9090
+	}
+
 	logger.Info("Starting keda-gpu-scaler",
-		zap.Int("port", *port),
-		zap.Int("metricsPort", *metricsPort),
-		zap.Int("healthPort", *healthPort),
+		zap.Int("grpcPort", *port),
+		zap.Int("httpPort", httpPort),
 		zap.String("logLevel", *logLevel),
 	)
 
@@ -67,17 +72,15 @@ func main() {
 	var nvmlReady atomic.Bool
 	var collector gpu.MetricsCollector
 
-	healthMux := http.NewServeMux()
-	// Liveness: is the process alive? Always 200 — no dependency checks.
-	// k8s restarts the pod only if this fails (i.e. the process is hung/dead).
-	healthMux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+	// Single HTTP mux — /healthz and /readyz registered now (before NVML init)
+	// so k8s can see the pod is alive during startup. /metrics added after init.
+	// http.ServeMux is safe to add handlers to after the server has started.
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
-	// Readiness: are dependencies ready to serve traffic?
-	// Returns 503 until NVML initialises, then checks the GPU driver is reachable.
-	// k8s holds traffic (no restarts) until this passes.
-	healthMux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
 		if !nvmlReady.Load() {
 			http.Error(w, "NVML not yet initialized", http.StatusServiceUnavailable)
 			return
@@ -87,13 +90,13 @@ func main() {
 			return
 		}
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("Ready"))
+		_, _ = w.Write([]byte("ok"))
 	})
 	go func() {
-		addr := fmt.Sprintf(":%d", *healthPort)
-		logger.Info("Health check server listening", zap.String("address", addr))
-		if err := http.ListenAndServe(addr, healthMux); err != nil && err != http.ErrServerClosed {
-			logger.Fatal("Health server failed", zap.Error(err))
+		addr := fmt.Sprintf(":%d", httpPort)
+		logger.Info("HTTP server listening", zap.String("address", addr))
+		if err := http.ListenAndServe(addr, mux); err != nil && err != http.ErrServerClosed {
+			logger.Fatal("HTTP server failed", zap.Error(err))
 		}
 	}()
 
@@ -108,39 +111,27 @@ func main() {
 		}
 	}()
 	collector = nvmlCollector
-	nvmlReady.Store(true) // NVML is up — /readyz will now return 200
-	logger.Info("NVML initialized, pod is ready")
 
-	// Wrap collector with prometheus instrumentation if metrics are enabled
+	// Wrap with Prometheus instrumentation and add /metrics to the shared mux.
 	var metricsCollector gpu.MetricsCollector = collector
 	if *metricsPort > 0 {
 		metrics.Register(prometheus.DefaultRegisterer)
 		metricsCollector = metrics.Wrap(collector)
-
-		mux := http.NewServeMux()
 		mux.Handle("/metrics", promhttp.Handler())
-		metricsAddr := fmt.Sprintf(":%d", *metricsPort)
-		go func() {
-			logger.Info("Prometheus metrics server listening", zap.String("address", metricsAddr))
-			if err := http.ListenAndServe(metricsAddr, mux); err != nil && err != http.ErrServerClosed {
-				logger.Fatal("Metrics server failed", zap.Error(err))
-			}
-		}()
+		logger.Info("Prometheus metrics enabled", zap.String("path", fmt.Sprintf(":%d/metrics", httpPort)))
 	} else {
 		logger.Info("Prometheus metrics disabled (metrics-port=0)")
 	}
 
-	// Log detected GPUs
-	count, err := metricsCollector.DeviceCount()
-	if err != nil {
-		logger.Fatal("Failed to get GPU device count", zap.Error(err))
-	}
-	logger.Info("GPU devices detected", zap.Int("count", count))
+	nvmlReady.Store(true) // NVML is up — /readyz will now return 200
+	logger.Info("NVML initialized, pod is ready")
 
+	// Log detected GPUs — CollectAll gives us the count, no need for a separate DeviceCount call.
 	allMetrics, err := metricsCollector.CollectAll()
 	if err != nil {
 		logger.Warn("Failed to collect initial GPU metrics", zap.Error(err))
 	} else {
+		logger.Info("GPU devices detected", zap.Int("count", len(allMetrics)))
 		for _, m := range allMetrics {
 			logger.Info("GPU device",
 				zap.Int("index", m.Index),

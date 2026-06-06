@@ -28,11 +28,9 @@ metrics:
   enabled: true
   port: 9090
 
-# HTTP health check server. /healthz = liveness, /readyz = readiness.
-# /healthz always returns 200 (process alive check only).
-# /readyz returns 503 until NVML initialises and DeviceCount() succeeds.
+# Probe timing — /healthz (liveness) and /readyz (readiness) are served
+# on the same port as /metrics (metrics.port above).
 healthCheck:
-  port: 8081
   livenessProbe:
     initialDelaySeconds: 5
     periodSeconds: 10

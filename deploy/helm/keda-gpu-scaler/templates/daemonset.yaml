@@ -35,7 +35,6 @@ spec:
           args:
             - --port={{ .Values.grpc.port }}
             - --log-level={{ .Values.logLevel }}
-            - --health-port={{ .Values.healthCheck.port }}
             {{- if .Values.metrics.enabled }}
             - --metrics-port={{ .Values.metrics.port }}
             {{- else }}
@@ -45,29 +44,22 @@ spec:
             - name: grpc
               containerPort: {{ .Values.grpc.port }}
               protocol: TCP
-            - name: health
-              containerPort: {{ .Values.healthCheck.port }}
-              protocol: TCP
-            {{- if .Values.metrics.enabled }}
             - name: metrics
               containerPort: {{ .Values.metrics.port }}
               protocol: TCP
-            {{- end }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
-          # Liveness: restart the pod if the GPU driver becomes unhealthy after init.
           livenessProbe:
             httpGet:
               path: /healthz
-              port: {{ .Values.healthCheck.port }}
+              port: {{ .Values.metrics.port }}
             initialDelaySeconds: {{ .Values.healthCheck.livenessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.healthCheck.livenessProbe.periodSeconds }}
             failureThreshold: {{ .Values.healthCheck.livenessProbe.failureThreshold }}
-          # Readiness: hold traffic until NVML has initialised successfully.
           readinessProbe:
             httpGet:
               path: /readyz
-              port: {{ .Values.healthCheck.port }}
+              port: {{ .Values.metrics.port }}
             initialDelaySeconds: {{ .Values.healthCheck.readinessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.healthCheck.readinessProbe.periodSeconds }}
             failureThreshold: {{ .Values.healthCheck.readinessProbe.failureThreshold }}

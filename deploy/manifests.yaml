@@ -29,10 +29,6 @@ spec:
       targetPort: metrics
       protocol: TCP
       name: metrics
-    - port: 8081
-      targetPort: health
-      protocol: TCP
-      name: health
   selector:
     app.kubernetes.io/name: keda-gpu-scaler
 
@@ -82,16 +78,12 @@ spec:
             - "--port=6000"
             - "--log-level=info"
             - "--metrics-port=9090"
-            - "--health-port=8081"
           ports:
             - name: grpc
               containerPort: 6000
               protocol: TCP
             - name: metrics
               containerPort: 9090
-              protocol: TCP
-            - name: health
-              containerPort: 8081
               protocol: TCP
           # NVML requires root + access to the host's NVIDIA device files.
           securityContext:
@@ -108,7 +100,7 @@ spec:
           livenessProbe:
             httpGet:
               path: /healthz
-              port: 8081
+              port: 9090
             initialDelaySeconds: 5
             periodSeconds: 10
             failureThreshold: 3
@@ -116,7 +108,7 @@ spec:
           readinessProbe:
             httpGet:
               path: /readyz
-              port: 8081
+              port: 9090
             initialDelaySeconds: 3
             periodSeconds: 5
             failureThreshold: 6
