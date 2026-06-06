@@ -28,6 +28,20 @@ metrics:
   enabled: true
   port: 9090
 
+# HTTP health check server. /healthz = liveness, /readyz = readiness.
+# /healthz always returns 200 (process alive check only).
+# /readyz returns 503 until NVML initialises and DeviceCount() succeeds.
+healthCheck:
+  port: 8081
+  livenessProbe:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    failureThreshold: 3
+  readinessProbe:
+    initialDelaySeconds: 3
+    periodSeconds: 5
+    failureThreshold: 6
+
 nodeSelector:
   nvidia.com/gpu.present: "true"
 

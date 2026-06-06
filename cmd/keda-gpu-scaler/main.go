@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync/atomic"
 	"syscall"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -43,6 +44,7 @@ import (
 var (
 	port        = flag.Int("port", 6000, "gRPC server port")
 	metricsPort = flag.Int("metrics-port", 9090, "Prometheus metrics HTTP port (0 to disable)")
+	healthPort  = flag.Int("health-port", 8081, "HTTP health check port (/healthz liveness, /readyz readiness)")
 	logLevel    = flag.String("log-level", "info", "Log level (debug, info, warn, error)")
 )
 
@@ -55,19 +57,59 @@ func main() {
 	logger.Info("Starting keda-gpu-scaler",
 		zap.Int("port", *port),
 		zap.Int("metricsPort", *metricsPort),
+		zap.Int("healthPort", *healthPort),
 		zap.String("logLevel", *logLevel),
 	)
 
+	// nvmlReady flips to true once NVML initialises successfully.
+	// /readyz blocks traffic until then; /healthz stays 200 so k8s never
+	// restarts the pod just because NVML init is still in progress.
+	var nvmlReady atomic.Bool
+	var collector gpu.MetricsCollector
+
+	healthMux := http.NewServeMux()
+	// Liveness: is the process alive? Always 200 — no dependency checks.
+	// k8s restarts the pod only if this fails (i.e. the process is hung/dead).
+	healthMux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	})
+	// Readiness: are dependencies ready to serve traffic?
+	// Returns 503 until NVML initialises, then checks the GPU driver is reachable.
+	// k8s holds traffic (no restarts) until this passes.
+	healthMux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
+		if !nvmlReady.Load() {
+			http.Error(w, "NVML not yet initialized", http.StatusServiceUnavailable)
+			return
+		}
+		if _, err := collector.DeviceCount(); err != nil {
+			http.Error(w, "GPU driver unreachable: "+err.Error(), http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("Ready"))
+	})
+	go func() {
+		addr := fmt.Sprintf(":%d", *healthPort)
+		logger.Info("Health check server listening", zap.String("address", addr))
+		if err := http.ListenAndServe(addr, healthMux); err != nil && err != http.ErrServerClosed {
+			logger.Fatal("Health server failed", zap.Error(err))
+		}
+	}()
+
 	// Initialize NVML GPU collector
-	collector, err := gpu.NewCollector(logger)
+	nvmlCollector, err := gpu.NewCollector(logger)
 	if err != nil {
 		logger.Fatal("Failed to initialize GPU collector", zap.Error(err))
 	}
 	defer func() {
-		if err := collector.Close(); err != nil {
+		if err := nvmlCollector.Close(); err != nil {
 			logger.Warn("Failed to close GPU collector", zap.Error(err))
 		}
 	}()
+	collector = nvmlCollector
+	nvmlReady.Store(true) // NVML is up — /readyz will now return 200
+	logger.Info("NVML initialized, pod is ready")
 
 	// Wrap collector with prometheus instrumentation if metrics are enabled
 	var metricsCollector gpu.MetricsCollector = collector
@@ -77,9 +119,6 @@ func main() {
 
 		mux := http.NewServeMux()
 		mux.Handle("/metrics", promhttp.Handler())
-		mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-		})
 		metricsAddr := fmt.Sprintf(":%d", *metricsPort)
 		go func() {
 			logger.Info("Prometheus metrics server listening", zap.String("address", metricsAddr))

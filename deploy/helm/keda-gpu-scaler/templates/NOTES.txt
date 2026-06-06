@@ -17,7 +17,12 @@ Verify the scaler pods are running on GPU nodes:
 
   kubectl get pods -n {{ .Release.Namespace }} -l {{ include "keda-gpu-scaler.selectorLabels" . | replace ": " "=" | replace "\n" "," }}
 
-Check gRPC health:
+Check Kubernetes pod health (liveness/readiness):
+
+  kubectl exec -n {{ .Release.Namespace }} <pod-name> -- wget -qO- http://localhost:{{ .Values.healthCheck.port }}/healthz
+  kubectl exec -n {{ .Release.Namespace }} <pod-name> -- wget -qO- http://localhost:{{ .Values.healthCheck.port }}/readyz
+
+Check gRPC health (used by KEDA to verify the scaler is reachable):
 
   kubectl exec -n {{ .Release.Namespace }} <pod-name> -- grpc_health_probe -addr=:{{ .Values.grpc.port }}
 
