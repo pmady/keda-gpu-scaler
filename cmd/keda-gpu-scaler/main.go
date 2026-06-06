@@ -113,7 +113,7 @@ func main() {
 	collector = nvmlCollector
 
 	// Wrap with Prometheus instrumentation and add /metrics to the shared mux.
-	var metricsCollector gpu.MetricsCollector = collector
+	metricsCollector := collector
 	if *metricsPort > 0 {
 		metrics.Register(prometheus.DefaultRegisterer)
 		metricsCollector = metrics.Wrap(collector)
