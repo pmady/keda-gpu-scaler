@@ -7,7 +7,7 @@ Everything goes in the ScaledObject trigger `metadata`. No config files or extra
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `profile` | Pre-built scaling profile name | (none) |
-| `metricType` | GPU metric to scale on | `gpu_utilization` |
+| `metricType` | GPU metric to scale on: `gpu_utilization`, `memory_utilization`, `memory_used_mib`, `memory_used_percent`, `temperature`, `power_draw`, `pcie_tx_kbps`, `pcie_rx_kbps`, `nvlink_tx_mbps`, `nvlink_rx_mbps` | `gpu_utilization` |
 | `targetValue` | Target metric value for scaling | `80` |
 | `targetGpuUtilization` | Shorthand for GPU utilization target | (none) |
 | `targetMemoryUtilization` | Shorthand for VRAM utilization target | (none) |
@@ -22,6 +22,7 @@ Profiles bundle defaults for common workloads. Override any parameter in the tri
 
 | Profile | Primary Metric | Target | Activation | Use Case |
 |---------|---------------|--------|------------|----------|
+| `distributed-training` | NVLink TX | 800 | 100 | Data-parallel training on NVLink systems |
 | `vllm-inference` | Memory % | 80 | 5 | vLLM / LLM serving with scale-to-zero |
 | `triton-inference` | GPU Util | 75 | 10 | NVIDIA Triton Inference Server |
 | `training` | GPU Util | 90 | 0 | Training jobs (no scale-to-zero) |
@@ -70,6 +71,18 @@ On multi-GPU nodes, `aggregation` controls how per-GPU values are reduced to one
 - **avg** — scale on average utilization. Good for training where GPUs should be evenly loaded.
 - **min** — scale when the least-loaded GPU hits the threshold. Conservative.
 - **sum** — total utilization. Useful for capacity-based decisions.
+
+## Advanced GPU Metrics
+
+### PCIe Bandwidth Metrics
+- `pcie_tx_kbps` - PCIe transmit throughput (KB/s) - useful for CPU↔GPU data transfer bottlenecks
+- `pcie_rx_kbps` - PCIe receive throughput (KB/s) - useful for GPU↔CPU data transfer bottlenecks
+
+### NVLink Bandwidth Metrics  
+- `nvlink_tx_mbps` - NVLink transmit throughput (MB/s) - useful for GPU↔GPU communication in distributed training
+- `nvlink_rx_mbps` - NVLink receive throughput (MB/s) - useful for GPU↔GPU communication in distributed training
+
+**Note:** NVLink metrics are 0 on hardware without NVLink (e.g., T4, A10 GPUs). This is normal behavior.
 
 ## Scale-to-Zero
 
@@ -124,6 +137,10 @@ When `--metrics-port` is non-zero, an HTTP server exposes `/metrics` in Promethe
 | `keda_gpu_scaler_gpu_memory_total_bytes` | Gauge | `gpu_index`, `gpu_uuid`, `gpu_name` | Total GPU memory |
 | `keda_gpu_scaler_gpu_temperature_celsius` | Gauge | `gpu_index`, `gpu_uuid`, `gpu_name` | GPU temperature |
 | `keda_gpu_scaler_gpu_power_draw_watts` | Gauge | `gpu_index`, `gpu_uuid`, `gpu_name` | GPU power draw |
+| `keda_gpu_scaler_gpu_pcie_tx_throughput_kbps` | Gauge | `gpu_index`, `gpu_uuid`, `gpu_name` | PCIe transmit throughput |
+| `keda_gpu_scaler_gpu_pcie_rx_throughput_kbps` | Gauge | `gpu_index`, `gpu_uuid`, `gpu_name` | PCIe receive throughput |
+| `keda_gpu_scaler_gpu_nvlink_tx_throughput_mbps` | Gauge | `gpu_index`, `gpu_uuid`, `gpu_name` | NVLink transmit throughput |
+| `keda_gpu_scaler_gpu_nvlink_rx_throughput_mbps` | Gauge | `gpu_index`, `gpu_uuid`, `gpu_name` | NVLink receive throughput |
 | `keda_gpu_scaler_collections_total` | Counter | — | Total NVML collection calls |
 | `keda_gpu_scaler_collection_errors_total` | Counter | — | Failed NVML collections |
 | `keda_gpu_scaler_collection_duration_seconds` | Histogram | — | NVML collection latency |
@@ -138,6 +155,20 @@ When `--probe-port` is non-zero, an HTTP server exposes:
 - `/readyz` — returns 200 after NVML initializes and the first metrics collection succeeds.
 
 ## Examples
+
+### Distributed Training on NVLink
+
+```yaml
+# Example: Distributed training on NVLink systems
+triggers:
+  - type: external
+    metadata:
+      scalerAddress: "keda-gpu-scaler.keda.svc.cluster.local:6000"
+      profile: "distributed-training"
+      # Override if needed:
+      # targetValue: "1000"  # Higher target for faster hardware
+      # activationThreshold: "50"
+```
 
 Check `deploy/examples/` for ScaledObject manifests:
 
