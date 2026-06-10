@@ -3,7 +3,7 @@ module github.com/pmady/keda-gpu-scaler
 go 1.25.5
 
 require (
-	github.com/NVIDIA/go-nvml v0.13.0-1
+	github.com/NVIDIA/go-nvml v0.13.1-0
 	github.com/prometheus/client_golang v1.23.2
 	go.uber.org/zap v1.28.0
 	google.golang.org/grpc v1.81.1
