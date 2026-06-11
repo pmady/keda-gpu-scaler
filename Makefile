@@ -9,8 +9,13 @@ GOPATH := $(shell go env GOPATH)
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
-build: ## Build the binary (requires CGO for NVML)
+build: ## Build the KEDA scaler binary (requires CGO for NVML)
 	CGO_ENABLED=1 go build -o bin/$(BINARY_NAME) ./cmd/keda-gpu-scaler/
+
+build-metrics: ## Build the standalone GPU metrics CLI
+	CGO_ENABLED=1 go build -o bin/gpu-metrics ./cmd/gpu-metrics/
+
+build-all: build build-metrics ## Build all binaries
 
 proto: ## Generate protobuf Go code
 	protoc --go_out=pkg/externalscaler --go_opt=paths=source_relative \
