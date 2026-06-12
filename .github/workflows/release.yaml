@@ -12,9 +12,21 @@ env:
   IMAGE_REPO: ghcr.io/pmady/keda-gpu-scaler
 
 jobs:
+  # Reject tags that are not strict semver (vX.Y.Z) before doing any real work.
+  validate-tag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate semver tag
+        run: |
+          if ! echo "${GITHUB_REF_NAME}" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Tag '${GITHUB_REF_NAME}' is not valid semver (vX.Y.Z). Aborting release."
+            exit 1
+          fi
+
   # Build multi-arch images and push to GHCR on tag push.
   images:
     runs-on: ubuntu-latest
+    needs: [validate-tag]
     permissions:
       contents: read
       packages: write
