@@ -1,3 +1,5 @@
+//go:build mock
+
 /*
 Copyright 2026 The keda-gpu-scaler Authors.
 
