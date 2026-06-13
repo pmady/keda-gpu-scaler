@@ -34,6 +34,7 @@ nav:
   - Architecture: DESIGN.md
   - Migration Guide: MIGRATION.md
   - Configuration: configuration.md
+  - HPC Integration: hpc.md
   - FAQ: FAQ.md
   - Changelog: changelog.md
   - Contributing: contributing.md

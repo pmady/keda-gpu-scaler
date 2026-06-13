@@ -281,7 +281,7 @@ make deploy
 
 ### Standalone GPU Metrics CLI
 
-Collect GPU metrics without Kubernetes — works on bare metal, SLURM jobs, Singularity containers.
+Collect GPU metrics without Kubernetes — works on bare metal, SLURM jobs, Flux jobs, and Singularity containers.
 
 ```bash
 gpu-metrics                       # one-shot table output
@@ -290,6 +290,20 @@ gpu-metrics --format csv          # CSV for analysis
 gpu-metrics --interval 5s         # continuous collection
 gpu-metrics --device 0 --quiet    # single GPU, no logs
 ```
+
+**SLURM** — auto-detected when `SLURM_JOB_ID` is set. Collects only the GPUs assigned to your job step:
+
+```bash
+srun --gres=gpu:2 gpu-metrics --format json
+```
+
+**Flux** — auto-detected when `FLUX_JOB_ID` is set. Collects only the GPUs in `CUDA_VISIBLE_DEVICES`:
+
+```bash
+flux run -N1 -g2 gpu-metrics --format json
+```
+
+See **[HPC Integration](docs/hpc.md)** for SLURM/Flux usage, CSV context columns, and Singularity examples.
 
 Or build the Docker image directly:
 
@@ -318,6 +332,7 @@ docker push your-registry/keda-gpu-scaler:v0.1.0
 
 - **[Design Document](docs/DESIGN.md)** — Architecture decisions, gRPC interface, scaling profiles, testing strategy
 - **[Migration Guide](docs/MIGRATION.md)** — Replace dcgm-exporter + Prometheus with keda-gpu-scaler
+- **[HPC Integration](docs/hpc.md)** — SLURM and Flux workload manager support
 - **[FAQ](docs/FAQ.md)** — Common questions about GPU scaling, MIG, multi-GPU, scale-to-zero
 - **[Changelog](CHANGELOG.md)** — Release history
 
@@ -347,8 +362,8 @@ Using keda-gpu-scaler? Add your organization to [ADOPTERS.md](ADOPTERS.md).
 
 ### In Progress (v0.5.0)
 
-- [ ] SLURM workload manager integration ([#52](https://github.com/pmady/keda-gpu-scaler/issues/52))
-- [ ] Flux workload manager integration ([#53](https://github.com/pmady/keda-gpu-scaler/issues/53))
+- [x] SLURM workload manager integration ([#52](https://github.com/pmady/keda-gpu-scaler/issues/52))
+- [x] Flux workload manager integration ([#53](https://github.com/pmady/keda-gpu-scaler/issues/53))
 - [ ] Cross-environment GPU metrics parity — K8s, SLURM, Flux ([#54](https://github.com/pmady/keda-gpu-scaler/issues/54))
 - [ ] NVIDIA collaboration for cross-platform metrics
 
