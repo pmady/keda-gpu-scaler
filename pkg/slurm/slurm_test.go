@@ -299,7 +299,9 @@ func TestVisibleDevices(t *testing.T) {
 		{name: "empty", gpus: "", want: nil},
 		{name: "with spaces", gpus: "0, 1, 3", want: []int{0, 1, 3}},
 		{name: "non-numeric skipped", gpus: "0,gpu1,2", want: []int{0, 2}},
-		{name: "all garbage", gpus: "foo,bar", want: []int{}},
+		{name: "mig uuid skipped", gpus: "MIG-GPU-aaaa/3/0,1", want: []int{1}},
+		{name: "all mig uuids skipped", gpus: "MIG-GPU-aaaa/3/0,MIG-GPU-bbbb/1/0", want: nil},
+		{name: "all garbage", gpus: "foo,bar", want: nil},
 		{name: "trailing comma", gpus: "0,1,", want: []int{0, 1}},
 		{name: "high indices", gpus: "4,5,6,7", want: []int{4, 5, 6, 7}},
 	}
@@ -307,6 +309,51 @@ func TestVisibleDevices(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			j := JobContext{GPUs: tt.gpus}
 			assert.Equal(t, tt.want, j.VisibleDevices())
+		})
+	}
+}
+
+func TestMIGUUIDs(t *testing.T) {
+	tests := []struct {
+		name string
+		gpus string
+		want []string
+	}{
+		{
+			name: "single mig uuid",
+			gpus: "MIG-GPU-aaaa1111-bbbb-cccc-dddd/3/0",
+			want: []string{"MIG-GPU-aaaa1111-bbbb-cccc-dddd/3/0"},
+		},
+		{
+			name: "multiple mig uuids",
+			gpus: "MIG-GPU-aaaa/3/0,MIG-GPU-aaaa/4/0",
+			want: []string{"MIG-GPU-aaaa/3/0", "MIG-GPU-aaaa/4/0"},
+		},
+		{
+			name: "mixed: mig and integer — mig only returned",
+			gpus: "MIG-GPU-aaaa/3/0,0,MIG-GPU-bbbb/1/0",
+			want: []string{"MIG-GPU-aaaa/3/0", "MIG-GPU-bbbb/1/0"},
+		},
+		{
+			name: "integer only — returns nil",
+			gpus: "0,1,2",
+			want: nil,
+		},
+		{
+			name: "empty",
+			gpus: "",
+			want: nil,
+		},
+		{
+			name: "mig uuid with spaces",
+			gpus: " MIG-GPU-aaaa/3/0 , MIG-GPU-bbbb/1/0 ",
+			want: []string{"MIG-GPU-aaaa/3/0", "MIG-GPU-bbbb/1/0"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			j := JobContext{GPUs: tt.gpus}
+			assert.Equal(t, tt.want, j.MIGUUIDs())
 		})
 	}
 }

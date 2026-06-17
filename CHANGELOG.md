@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **MIG (Multi-Instance GPU) per-instance metrics** — `CollectAll()` now auto-detects MIG-enabled GPUs and enumerates each compute instance via NVML, returning one `Metrics` entry per instance instead of one per physical GPU. Shared chip-level metrics (temperature, power, PCIe, NVLink) are read from the parent GPU and copied into every instance. In HPC environments (SLURM, Flux), MIG UUIDs in `CUDA_VISIBLE_DEVICES` are detected and resolved individually via `CollectByUUID()`. New `Metrics` fields: `IsMIGInstance`, `ParentIndex`, `MigProfile`. New method: `CollectByUUID(uuid string)` on `MetricsCollector`. New CSV columns: `is_mig_instance`, `parent_index`, `mig_profile`. Table output shows `gpu<N>/inst<M>` labels for MIG rows.
 - **Cross-environment GPU metrics parity** (`--env` flag) — single binary and unified JSON schema across Kubernetes, SLURM, Flux, and standalone. The new `pkg/env` package auto-detects the orchestrator (priority: SLURM → Flux → Kubernetes → standalone) and populates a common `environment` block in all output formats (JSON, CSV, table). Replaces the separate `--slurm` and `--flux` flags.
 - Unified JSON output schema with top-level `environment` and `collected_at` fields, enabling direct comparison of GPU metrics across environments.
 - `pkg/env` package: `Detect()`, `Parse()`, `FromType()`, `Context` with `VisibleDevices()`, `Header()`, `Row()`.

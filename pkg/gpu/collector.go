@@ -21,6 +21,9 @@ package gpu
 type MetricsCollector interface {
 	CollectAll() ([]Metrics, error)
 	CollectDevice(index int) (Metrics, error)
+	// CollectByUUID collects metrics for a device identified by UUID.
+	// Supports both standard GPU UUIDs and MIG instance UUIDs (e.g. "MIG-GPU-.../3/0").
+	CollectByUUID(uuid string) (Metrics, error)
 	DeviceCount() (int, error)
 	Close() error
 }

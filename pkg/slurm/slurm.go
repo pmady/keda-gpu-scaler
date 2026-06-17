@@ -98,18 +98,35 @@ func slurmGPUs() string {
 	return ""
 }
 
-// VisibleDevices parses GPUs into device indices.
+// VisibleDevices parses GPUs into integer device indices.
+// MIG UUIDs (e.g. "MIG-GPU-…/3/0") are skipped; use MIGUUIDs() for those.
 func (j JobContext) VisibleDevices() []int {
 	if j.GPUs == "" {
 		return nil
 	}
-	parts := strings.Split(j.GPUs, ",")
-	devs := make([]int, 0, len(parts))
-	for _, p := range parts {
+	var devs []int
+	for _, p := range strings.Split(j.GPUs, ",") {
 		p = strings.TrimSpace(p)
 		if idx, err := strconv.Atoi(p); err == nil {
 			devs = append(devs, idx)
 		}
 	}
 	return devs
+}
+
+// MIGUUIDs returns the MIG instance UUIDs from the scheduler-assigned GPU
+// list (e.g. SLURM_STEP_GPUS = "MIG-GPU-aaaa/3/0,MIG-GPU-aaaa/4/0").
+// Integer device entries are ignored; use VisibleDevices() for those.
+func (j JobContext) MIGUUIDs() []string {
+	if j.GPUs == "" {
+		return nil
+	}
+	var uuids []string
+	for _, p := range strings.Split(j.GPUs, ",") {
+		p = strings.TrimSpace(p)
+		if strings.HasPrefix(p, "MIG-") {
+			uuids = append(uuids, p)
+		}
+	}
+	return uuids
 }

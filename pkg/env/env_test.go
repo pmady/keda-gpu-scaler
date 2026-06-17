@@ -455,3 +455,110 @@ func TestTypeConstants(t *testing.T) {
 		t.Errorf("Standalone = %q, want \"standalone\"", Standalone)
 	}
 }
+
+// --- MIG UUID propagation ---
+
+func TestFromType_SLURM_MIGUUIDs(t *testing.T) {
+	clearSchedulerEnv(t)
+	t.Setenv("SLURM_JOB_ID", "42")
+	t.Setenv("SLURM_STEP_GPUS", "MIG-GPU-aaaa/3/0,MIG-GPU-aaaa/4/0")
+
+	ctx := FromType(SLURM)
+
+	got := ctx.MIGUUIDs()
+	if len(got) != 2 {
+		t.Fatalf("MIGUUIDs() returned %d entries, want 2: %v", len(got), got)
+	}
+	if got[0] != "MIG-GPU-aaaa/3/0" {
+		t.Errorf("MIGUUIDs()[0] = %q, want %q", got[0], "MIG-GPU-aaaa/3/0")
+	}
+	if got[1] != "MIG-GPU-aaaa/4/0" {
+		t.Errorf("MIGUUIDs()[1] = %q, want %q", got[1], "MIG-GPU-aaaa/4/0")
+	}
+}
+
+func TestFromType_SLURM_MIGUUIDs_nilWhenIntegers(t *testing.T) {
+	clearSchedulerEnv(t)
+	t.Setenv("SLURM_JOB_ID", "43")
+	t.Setenv("SLURM_STEP_GPUS", "0,1")
+
+	ctx := FromType(SLURM)
+
+	if got := ctx.MIGUUIDs(); got != nil {
+		t.Errorf("MIGUUIDs() = %v, want nil for integer GPU list", got)
+	}
+}
+
+func TestFromType_Flux_MIGUUIDs(t *testing.T) {
+	clearSchedulerEnv(t)
+	t.Setenv("FLUX_JOB_ID", "f-abc")
+	t.Setenv("CUDA_VISIBLE_DEVICES", "MIG-GPU-bbbb/1/0,MIG-GPU-bbbb/2/0")
+
+	ctx := FromType(Flux)
+
+	got := ctx.MIGUUIDs()
+	if len(got) != 2 {
+		t.Fatalf("MIGUUIDs() returned %d entries, want 2: %v", len(got), got)
+	}
+	if got[0] != "MIG-GPU-bbbb/1/0" {
+		t.Errorf("MIGUUIDs()[0] = %q, want %q", got[0], "MIG-GPU-bbbb/1/0")
+	}
+}
+
+func TestFromType_Flux_MIGUUIDs_nilWhenIntegers(t *testing.T) {
+	clearSchedulerEnv(t)
+	t.Setenv("FLUX_JOB_ID", "f-def")
+	t.Setenv("CUDA_VISIBLE_DEVICES", "0,1,2")
+
+	ctx := FromType(Flux)
+
+	if got := ctx.MIGUUIDs(); got != nil {
+		t.Errorf("MIGUUIDs() = %v, want nil for integer GPU list", got)
+	}
+}
+
+func TestFromType_Kubernetes_NoMIGUUIDs(t *testing.T) {
+	clearSchedulerEnv(t)
+	t.Setenv("KUBERNETES_SERVICE_HOST", "10.96.0.1")
+
+	ctx := FromType(Kubernetes)
+
+	if got := ctx.MIGUUIDs(); got != nil {
+		t.Errorf("MIGUUIDs() = %v, want nil for Kubernetes environment", got)
+	}
+}
+
+func TestFromType_Standalone_NoMIGUUIDs(t *testing.T) {
+	clearSchedulerEnv(t)
+
+	ctx := FromType(Standalone)
+
+	if got := ctx.MIGUUIDs(); got != nil {
+		t.Errorf("MIGUUIDs() = %v, want nil for standalone environment", got)
+	}
+}
+
+func TestContext_MIGUUIDs_nilByDefault(t *testing.T) {
+	// Zero-value Context must return nil, not an empty slice.
+	ctx := Context{}
+	if got := ctx.MIGUUIDs(); got != nil {
+		t.Errorf("MIGUUIDs() on zero Context = %v, want nil", got)
+	}
+}
+
+func TestFromType_SLURM_MixedMIGAndInt_VisibleDevicesEmpty(t *testing.T) {
+	// When all entries are MIG UUIDs, VisibleDevices should return nil and
+	// MIGUUIDs should return the UUIDs.
+	clearSchedulerEnv(t)
+	t.Setenv("SLURM_JOB_ID", "99")
+	t.Setenv("SLURM_STEP_GPUS", "MIG-GPU-aaaa/3/0,MIG-GPU-aaaa/4/0")
+
+	ctx := FromType(SLURM)
+
+	if got := ctx.VisibleDevices(); got != nil {
+		t.Errorf("VisibleDevices() = %v, want nil when only MIG UUIDs present", got)
+	}
+	if got := ctx.MIGUUIDs(); len(got) != 2 {
+		t.Errorf("MIGUUIDs() = %v, want 2 entries", got)
+	}
+}

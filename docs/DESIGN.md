@@ -156,9 +156,38 @@ For Kubernetes, `NODE_NAME`, `POD_NAME`, and `POD_NAMESPACE` must be exposed via
 - No secrets or credentials are required
 - NVML calls are read-only (metrics collection, no device configuration)
 
+## MIG (Multi-Instance GPU) Support (`pkg/gpu`)
+
+NVIDIA A100 and H100 GPUs can be partitioned into 2–7 independent MIG instances, each with its own NVML handle, dedicated SM engines, a fixed framebuffer slice, and independent utilization / memory counters. The scaler supports MIG via two collection strategies.
+
+### Kubernetes / Standalone — automatic enumeration
+
+`CollectAll()` checks each physical GPU for MIG mode via `nvmlDeviceGetMigMode`. When MIG is active, instead of reading the physical GPU once, it calls `nvmlDeviceGetMigDeviceHandleByIndex` in a loop until the driver returns an error, collecting one `Metrics` per compute instance. The loop replaces the physical-GPU entry entirely; the physical GPU does not appear as a separate row.
+
+Certain metrics (temperature, power draw/limit, PCIe throughput, NVLink bandwidth) are chip-level resources shared across all slices. They are read once from the physical handle via `collectPhysicalForMIG()` and copied verbatim into every instance entry.
+
+### HPC (SLURM / Flux) — UUID-based collection
+
+When a job is allocated MIG instances, the driver writes MIG UUIDs to `CUDA_VISIBLE_DEVICES` (e.g. `MIG-GPU-aaaa1111.../3/0`). The `pkg/slurm` and `pkg/flux` `MIGUUIDs()` methods detect these entries (they start with `"MIG-"`) and return them separately from integer device indices. `pkg/env.FromType()` propagates them into `Context.migUUIDs`, and `cmd/gpu-metrics` calls `CollectByUUID()` for each. `nvmlDeviceGetHandleByUUID` resolves MIG UUIDs correctly — the same path used for standard GPU UUIDs.
+
+### MIG Metrics struct fields
+
+Three fields are added to `gpu.Metrics`; they are zero-valued for standard (non-MIG) entries:
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `IsMIGInstance` | `bool` | `true` when this entry is a MIG compute instance |
+| `ParentIndex` | `int` | Physical GPU index (`-1` when resolved by UUID) |
+| `MigProfile` | `string` | Profile slice, e.g. `"3g.40gb"` |
+
+### Degraded states
+
+When MIG mode is enabled but the GPU has not yet been partitioned (no compute instances exist), `collectMIGInstances` logs a warning and returns no entries for that GPU — rather than fabricating physical-level metrics that would misrepresent the partitioned state.
+
+`CollectDevice(index)` still works on MIG-enabled GPUs but logs a warning and returns physical-level metrics only. Use `CollectAll` or `CollectByUUID` for per-instance MIG data.
+
 ## Future Work
 
 - **AMD ROCm support**: Same DaemonSet pattern, different hardware library (`rocm-smi`)
-- **MIG metrics**: NVIDIA Multi-Instance GPU partitions each have their own utilization metrics
 - **NVLink topology**: Prefer scaling on nodes with direct GPU-to-GPU interconnect
 - **vLLM queue depth**: Read pending request count directly from vLLM's engine API for more precise scaling

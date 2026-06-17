@@ -61,7 +61,22 @@ Any distribution with NVIDIA GPU nodes and KEDA v2.10+. Tested on:
 
 ## Does this work with MIG (Multi-Instance GPU)?
 
-Not yet. MIG support is on the [roadmap](../README.md#roadmap). Each MIG instance exposes separate NVML handles, so the scaler would need to enumerate partitions within a physical GPU.
+Yes. MIG support is implemented in `v0.6.x` and covers two modes:
+
+**Kubernetes / Standalone — automatic enumeration.** When `CollectAll()` runs and encounters a physical GPU with MIG enabled, it enumerates every MIG compute instance via `nvmlDeviceGetMigDeviceHandleByIndex` and returns one `Metrics` entry per instance. Physical-level metrics (temperature, power, PCIe throughput, NVLink bandwidth) are read from the parent GPU handle and copied into each instance's entry because those resources are chip-level and shared.
+
+**HPC (SLURM / Flux) — UUID-based collection.** When a SLURM or Flux job is allocated MIG instances, the driver sets `CUDA_VISIBLE_DEVICES` to a list of MIG UUIDs (e.g. `MIG-GPU-aaaa.../3/0`). `gpu-metrics` detects these UUIDs, resolves each one via `nvmlDeviceGetHandleByUUID`, and collects per-instance metrics — ensuring you see only the slices your job was granted, not the whole GPU.
+
+Each MIG `Metrics` entry includes three extra fields: `IsMIGInstance: true`, `ParentIndex` (the physical GPU index), and `MigProfile` (e.g. `"3g.40gb"`). Non-MIG entries leave these fields at their zero values.
+
+```json
+{
+  "Index": 0, "UUID": "MIG-GPU-.../3/0", "Name": "MIG 3g.40gb",
+  "GPUUtilization": 85, "MemoryUsedMiB": 30720, "MemoryTotalMiB": 40960,
+  "IsMIGInstance": true, "ParentIndex": 1, "MigProfile": "3g.40gb",
+  "TemperatureCelsius": 72, "PowerDrawWatts": 300
+}
+```
 
 ## What happens if the scaler pod crashes?
 
