@@ -42,7 +42,7 @@ func (c *Collector) collectMIGInstances(device nvml.Device, parentIndex int) ([]
 	physical := c.collectPhysicalForMIG(device, parentIndex)
 
 	var metrics []Metrics
-	for idx := uint32(0); ; idx++ {
+	for idx := 0; ; idx++ {
 		migDevice, ret := device.GetMigDeviceHandleByIndex(idx)
 		if ret != nvml.SUCCESS {
 			if idx == 0 {
@@ -53,11 +53,11 @@ func (c *Collector) collectMIGInstances(device nvml.Device, parentIndex int) ([]
 			break
 		}
 
-		m, err := c.collectMIGDevice(migDevice, parentIndex, int(idx), physical)
+		m, err := c.collectMIGDevice(migDevice, parentIndex, idx, physical)
 		if err != nil {
 			c.logger.Warn("failed to collect MIG instance metrics",
 				zap.Int("gpu", parentIndex),
-				zap.Uint32("instanceIdx", idx),
+				zap.Int("instanceIdx", idx),
 				zap.Error(err))
 			continue
 		}
