@@ -2,6 +2,10 @@
 
 Contributions are welcome.
 
+# Contributors
+
+See CONTRIBUTORS.md for a list of project contributors and their contributions.
+
 ## Getting Started
 
 1. Fork the repository
