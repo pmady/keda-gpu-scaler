@@ -1,4 +1,4 @@
-.PHONY: build proto test test-e2e lint clean docker-build docker-push docker-release deploy undeploy helm-lint helm-template helm-test help
+.PHONY: build proto test test-e2e lint vet clean docker-build docker-push docker-release deploy undeploy helm-lint helm-template helm-test help
 
 BINARY_NAME := keda-gpu-scaler
 IMAGE_REPO := ghcr.io/pmady/keda-gpu-scaler
@@ -30,6 +30,9 @@ test-e2e: ## Run e2e integration tests (no GPU required — uses mock collector)
 
 lint: ## Run linter
 	golangci-lint run ./...
+
+vet: ## Run vet
+	go vet ./...
 
 clean: ## Remove build artifacts
 	rm -rf bin/
