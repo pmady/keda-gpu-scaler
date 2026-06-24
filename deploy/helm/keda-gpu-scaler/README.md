@@ -39,7 +39,7 @@ helm uninstall keda-gpu-scaler --namespace keda
 ## Usage
 
 Once installed, point a KEDA `ScaledObject` at the scaler Service. See
-`templates/example-scaledobject.yaml` for a complete vLLM example:
+`examples/scaledobject.yaml` for a complete vLLM example:
 
 ```yaml
 triggers:
