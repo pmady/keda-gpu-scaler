@@ -228,7 +228,9 @@ func (s *GPUExternalScaler) getMetricValue(cfg scalerConfig) (float64, error) {
 		if err != nil {
 			return 0, err
 		}
-		return extractMetric(m, cfg.metricType), nil
+		value := extractMetric(m, cfg.metricType)
+		s.logMetric(m, cfg.metricType, value)
+		return value, nil
 	}
 
 	allMetrics, err := s.collector.CollectAll()
@@ -242,9 +244,22 @@ func (s *GPUExternalScaler) getMetricValue(cfg scalerConfig) (float64, error) {
 	values := make([]float64, len(allMetrics))
 	for i, m := range allMetrics {
 		values[i] = extractMetric(m, cfg.metricType)
+		s.logMetric(m, cfg.metricType, values[i])
 	}
 
 	return aggregate(values, cfg.aggregation), nil
+}
+
+// logMetric emits a per-GPU debug log line that includes the GPU name, so that
+// on clusters with mixed GPU types (e.g. A100 + H100) operators can tell which
+// card a metric value came from rather than only seeing the index.
+func (s *GPUExternalScaler) logMetric(m gpu.Metrics, metricType profiles.MetricType, value float64) {
+	s.logger.Debug("collected GPU metric",
+		zap.Int("gpu_index", m.Index),
+		zap.String("gpu_name", m.Name),
+		zap.String("metric_type", string(metricType)),
+		zap.Float64("value", value),
+	)
 }
 
 func extractMetric(m gpu.Metrics, metricType profiles.MetricType) float64 {

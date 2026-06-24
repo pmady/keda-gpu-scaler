@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 
 	pb "github.com/pmady/keda-gpu-scaler/pkg/externalscaler"
 	"github.com/pmady/keda-gpu-scaler/pkg/gpu"
@@ -691,5 +692,48 @@ func TestIsActiveInvalidMetadata(t *testing.T) {
 	})
 	if err == nil {
 		t.Error("IsActive() with invalid profile should return error")
+	}
+}
+
+// Per-GPU metric logs must carry the GPU name (issue #75) so operators on
+// mixed-GPU clusters can tell which card a value came from.
+func TestGetMetricValueLogsGPUName(t *testing.T) {
+	tests := []struct {
+		name      string
+		metadata  map[string]string
+		wantLines int
+	}{
+		{"all GPUs", map[string]string{}, len(testDevices)},
+		{"single GPU", map[string]string{"gpuIndex": "0"}, 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			core, logs := observer.New(zap.DebugLevel)
+			s := NewGPUExternalScaler(gpu.NewMockCollector(testDevices), zap.New(core))
+
+			if _, err := s.GetMetrics(context.Background(), &pb.GetMetricsRequest{
+				ScaledObjectRef: &pb.ScaledObjectRef{Name: "test-so", ScalerMetadata: tt.metadata},
+			}); err != nil {
+				t.Fatalf("GetMetrics() error = %v", err)
+			}
+
+			entries := logs.FilterMessage("collected GPU metric").All()
+			if len(entries) != tt.wantLines {
+				t.Fatalf("got %d per-GPU log lines, want %d", len(entries), tt.wantLines)
+			}
+			for _, e := range entries {
+				fields := e.ContextMap()
+				if _, ok := fields["gpu_index"]; !ok {
+					t.Errorf("log entry missing gpu_index field: %v", fields)
+				}
+				name, ok := fields["gpu_name"]
+				if !ok {
+					t.Errorf("log entry missing gpu_name field: %v", fields)
+				} else if name != "A100" {
+					t.Errorf("gpu_name = %v, want A100", name)
+				}
+			}
+		})
 	}
 }
