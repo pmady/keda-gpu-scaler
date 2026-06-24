@@ -145,7 +145,7 @@ func TestFromEnv(t *testing.T) {
 		{
 			name: "GPU_DEVICE_ORDINAL fallback",
 			env: map[string]string{
-				"SLURM_JOB_ID":      "555",
+				"SLURM_JOB_ID":       "555",
 				"GPU_DEVICE_ORDINAL": "3",
 			},
 			want: JobContext{
@@ -243,8 +243,8 @@ func TestSlurmGPUPriority(t *testing.T) {
 			env: map[string]string{
 				"SLURM_STEP_GPUS":      "0",
 				"SLURM_JOB_GPUS":       "0,1",
-				"GPU_DEVICE_ORDINAL":    "0,1,2",
-				"CUDA_VISIBLE_DEVICES":  "0,1,2,3",
+				"GPU_DEVICE_ORDINAL":   "0,1,2",
+				"CUDA_VISIBLE_DEVICES": "0,1,2,3",
 			},
 			want: "0",
 		},
@@ -252,16 +252,16 @@ func TestSlurmGPUPriority(t *testing.T) {
 			name: "job wins when no step",
 			env: map[string]string{
 				"SLURM_JOB_GPUS":       "0,1",
-				"GPU_DEVICE_ORDINAL":    "0,1,2",
-				"CUDA_VISIBLE_DEVICES":  "0,1,2,3",
+				"GPU_DEVICE_ORDINAL":   "0,1,2",
+				"CUDA_VISIBLE_DEVICES": "0,1,2,3",
 			},
 			want: "0,1",
 		},
 		{
 			name: "ordinal wins when no step or job",
 			env: map[string]string{
-				"GPU_DEVICE_ORDINAL":    "0,1,2",
-				"CUDA_VISIBLE_DEVICES":  "0,1,2,3",
+				"GPU_DEVICE_ORDINAL":   "0,1,2",
+				"CUDA_VISIBLE_DEVICES": "0,1,2,3",
 			},
 			want: "0,1,2",
 		},

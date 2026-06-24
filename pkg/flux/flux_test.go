@@ -174,10 +174,10 @@ func TestFromEnv(t *testing.T) {
 		{
 			name: "no CUDA_VISIBLE_DEVICES means no GPUs",
 			env: map[string]string{
-				"FLUX_JOB_ID":      "cpuonly",
-				"FLUX_TASK_RANK":   "0",
-				"FLUX_JOB_SIZE":    "4",
-				"FLUX_JOB_NNODES":  "1",
+				"FLUX_JOB_ID":     "cpuonly",
+				"FLUX_TASK_RANK":  "0",
+				"FLUX_JOB_SIZE":   "4",
+				"FLUX_JOB_NNODES": "1",
 			},
 			want: JobContext{
 				JobID:    "cpuonly",

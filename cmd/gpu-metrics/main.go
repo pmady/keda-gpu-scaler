@@ -34,11 +34,11 @@ import (
 )
 
 var (
-	format  = flag.String("format", "table", "Output format: table, json, csv")
+	format   = flag.String("format", "table", "Output format: table, json, csv")
 	interval = flag.Duration("interval", 0, "Collection interval (0 = one-shot)")
-	device  = flag.Int("device", -1, "GPU device index (-1 = all)")
-	quiet   = flag.Bool("quiet", false, "Suppress log output")
-	envFlag = flag.String("env", "auto", "Environment: auto, k8s, slurm, flux, standalone")
+	device   = flag.Int("device", -1, "GPU device index (-1 = all)")
+	quiet    = flag.Bool("quiet", false, "Suppress log output")
+	envFlag  = flag.String("env", "auto", "Environment: auto, k8s, slurm, flux, standalone")
 )
 
 func main() {
