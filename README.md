@@ -92,13 +92,27 @@ kubectl apply -f deploy/manifests.yaml
 
 This deploys a DaemonSet that runs on every GPU node in your cluster, plus a ClusterIP Service for KEDA to discover it.
 
-Or use Helm:
+Or use Helm.
+
+**From the published OCI chart** (recommended — replace `<X.Y.Z>` with the
+[latest release](https://github.com/pmady/keda-gpu-scaler/releases)):
+
+```bash
+helm install keda-gpu-scaler \
+  oci://ghcr.io/pmady/charts/keda-gpu-scaler --version <X.Y.Z> \
+  --namespace keda --create-namespace
+```
+
+**From a local checkout:**
 
 ```bash
 helm install keda-gpu-scaler deploy/helm/keda-gpu-scaler \
   --namespace keda \
   --set nodeSelector."nvidia\.com/gpu\.present"=true
 ```
+
+See the [chart README](deploy/helm/keda-gpu-scaler/README.md) for all
+configurable values.
 
 ### 2. Attach to your AI Workload
 

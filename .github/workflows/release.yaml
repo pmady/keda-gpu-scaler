@@ -109,3 +109,37 @@ jobs:
             --generate-notes \
             keda-gpu-scaler_*_linux_*.tar.gz \
             checksums.txt
+
+  # Package the Helm chart and publish it as an OCI artifact to GHCR on tag push.
+  # Chart and app versions are stamped from the release tag (vX.Y.Z -> X.Y.Z), so
+  # the published chart version tracks the release rather than Chart.yaml's
+  # in-repo development version.
+  chart:
+    runs-on: ubuntu-latest
+    needs: [images]
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Helm
+        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5
+
+      - name: Package chart
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          helm package deploy/helm/keda-gpu-scaler \
+            --version "${version}" --app-version "${version}"
+
+      - name: Log in to GHCR
+        env:
+          HELM_REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "${HELM_REGISTRY_TOKEN}" | helm registry login ghcr.io \
+            --username "${{ github.actor }}" --password-stdin
+
+      - name: Push chart to GHCR (OCI)
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          helm push "keda-gpu-scaler-${version}.tgz" oci://ghcr.io/pmady/charts

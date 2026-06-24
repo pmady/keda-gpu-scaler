@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "keda-gpu-scaler.fullname" . }}-test-connection"
+  labels:
+    {{- include "keda-gpu-scaler.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+    - name: grpc-connection
+      image: busybox:1.37
+      command: ["sh", "-c"]
+      args:
+        - |
+          set -eu
+          host="{{ include "keda-gpu-scaler.fullname" . }}"
+          port="{{ .Values.grpc.port }}"
+          echo "Checking the keda-gpu-scaler gRPC endpoint at ${host}:${port} ..."
+          nc -w 5 "${host}" "${port}" < /dev/null
+          echo "OK: gRPC port ${port} on ${host} is reachable."
