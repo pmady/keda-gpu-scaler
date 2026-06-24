@@ -50,6 +50,9 @@ jobs:
       - name: Test
         run: go test -v -race ./pkg/...
 
+      - name: Vet
+        run: go vet ./...
+
   e2e:
     strategy:
       matrix:
