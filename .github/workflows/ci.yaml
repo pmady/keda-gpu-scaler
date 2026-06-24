@@ -74,6 +74,27 @@ jobs:
         with:
           version: latest
 
+  license:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: License compliance (Trivy)
+        uses: aquasecurity/trivy-action@18f2510ee396bbf400402947e7f3b01370070563 # v0.30.0
+        with:
+          scan-type: fs
+          scanners: license
+          severity: UNKNOWN,HIGH,CRITICAL
+          exit-code: 1
+
+      - name: Vulnerability scan (Trivy)
+        uses: aquasecurity/trivy-action@18f2510ee396bbf400402947e7f3b01370070563 # v0.30.0
+        with:
+          scan-type: fs
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          exit-code: 1
+
   helm-lint:
     runs-on: ubuntu-latest
     steps:
