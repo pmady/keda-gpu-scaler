@@ -1,0 +1,28 @@
+# Copy to terraform.tfvars and edit as needed. All values are optional; the
+# defaults stand up a small, single-GPU-node EKS cluster ready for integration
+# testing.
+
+# region       = "us-west-2"
+# cluster_name = "keda-gpu-scaler-test"
+
+# Kubernetes control plane version.
+# kubernetes_version = "1.33"
+
+# GPU node pool. g5.xlarge (A10G) is the default. Cheaper: g4dn.xlarge (T4).
+# Newer: g6.xlarge (L4). You must hold the matching on-demand vCPU quota.
+# gpu_instance_type = "g5.xlarge"
+# gpu_node_count    = 1
+
+# Tag the cluster so it's easy to find / clean up later.
+# tags = {
+#   Owner   = "you@example.com"
+#   Expires = "2026-12-31"
+# }
+
+# Pin/override add-on versions if needed.
+# gpu_operator_chart_version = "v26.3.2"
+# keda_chart_version         = "2.20.1"
+
+# Override the scaler image (defaults to the chart's ghcr.io/pmady image+tag).
+# scaler_image_repository = "ghcr.io/pmady/keda-gpu-scaler"
+# scaler_image_tag        = "0.1.0"
