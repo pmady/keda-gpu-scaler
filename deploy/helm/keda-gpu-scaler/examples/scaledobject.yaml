@@ -1,8 +1,12 @@
 # Example ScaledObject for scaling a vLLM deployment using keda-gpu-scaler.
-# This is NOT deployed by the Helm chart — copy and customize for your workload.
+#
+# This file lives outside the chart's templates/ directory, so Helm never
+# renders or deploys it. It is a reference you copy and customize for your own
+# workload — update scaleTargetRef, scalerAddress (namespace/port), and the
+# trigger metadata to match your deployment.
 #
 # Usage:
-#   kubectl apply -f example-scaledobject.yaml
+#   kubectl apply -f deploy/helm/keda-gpu-scaler/examples/scaledobject.yaml
 #
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
