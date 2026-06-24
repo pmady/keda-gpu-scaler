@@ -18,6 +18,9 @@ package scaler
 
 import (
 	"context"
+	"math"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"go.uber.org/zap"
@@ -735,5 +738,158 @@ func TestGetMetricValueLogsGPUName(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// --- vLLM queue depth / KV cache tests ---
+
+const fakeVLLMMetrics = `# HELP vllm:num_requests_waiting Number of waiting requests
+# TYPE vllm:num_requests_waiting gauge
+vllm:num_requests_waiting{model_name="llama-7b"} 8
+# HELP vllm:num_requests_running Number of running requests
+# TYPE vllm:num_requests_running gauge
+vllm:num_requests_running{model_name="llama-7b"} 4
+# HELP vllm:gpu_cache_usage_perc KV cache usage
+# TYPE vllm:gpu_cache_usage_perc gauge
+vllm:gpu_cache_usage_perc 0.72
+# HELP vllm:num_requests_swapped swapped
+# TYPE vllm:num_requests_swapped gauge
+vllm:num_requests_swapped 0
+`
+
+func fakeVLLMServer() *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(fakeVLLMMetrics))
+	}))
+}
+
+func TestGetMetrics_VLLMQueueDepth(t *testing.T) {
+	ts := fakeVLLMServer()
+	defer ts.Close()
+
+	s := NewGPUExternalScaler(gpu.NewMockCollector(testDevices), zap.NewNop())
+	resp, err := s.GetMetrics(context.Background(), &pb.GetMetricsRequest{
+		ScaledObjectRef: &pb.ScaledObjectRef{
+			Name: "vllm-so",
+			ScalerMetadata: map[string]string{
+				"metricType":   "vllm_queue_depth",
+				"vllmEndpoint": ts.URL,
+				"targetValue":  "5",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("GetMetrics() error = %v", err)
+	}
+	if len(resp.MetricValues) == 0 {
+		t.Fatal("GetMetrics() returned no metric values")
+	}
+	if resp.MetricValues[0].MetricValueFloat != 8 {
+		t.Errorf("queue depth = %v, want 8", resp.MetricValues[0].MetricValueFloat)
+	}
+}
+
+func TestGetMetrics_VLLMKVCacheUsage(t *testing.T) {
+	ts := fakeVLLMServer()
+	defer ts.Close()
+
+	s := NewGPUExternalScaler(gpu.NewMockCollector(testDevices), zap.NewNop())
+	resp, err := s.GetMetrics(context.Background(), &pb.GetMetricsRequest{
+		ScaledObjectRef: &pb.ScaledObjectRef{
+			Name: "vllm-kv-so",
+			ScalerMetadata: map[string]string{
+				"metricType":   "vllm_kv_cache_usage",
+				"vllmEndpoint": ts.URL,
+				"targetValue":  "80",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("GetMetrics() error = %v", err)
+	}
+	if len(resp.MetricValues) == 0 {
+		t.Fatal("GetMetrics() returned no metric values")
+	}
+	// 0.72 * 100 = 72
+	got := resp.MetricValues[0].MetricValueFloat
+	if math.Abs(got-72) > 0.1 {
+		t.Errorf("kv_cache_usage = %v, want 72", got)
+	}
+}
+
+func TestIsActive_VLLMQueueDepth(t *testing.T) {
+	ts := fakeVLLMServer()
+	defer ts.Close()
+
+	s := NewGPUExternalScaler(gpu.NewMockCollector(testDevices), zap.NewNop())
+
+	// Queue depth is 8, activation threshold is 1 → active
+	resp, err := s.IsActive(context.Background(), &pb.ScaledObjectRef{
+		Name: "vllm-so",
+		ScalerMetadata: map[string]string{
+			"metricType":          "vllm_queue_depth",
+			"vllmEndpoint":        ts.URL,
+			"activationThreshold": "1",
+		},
+	})
+	if err != nil {
+		t.Fatalf("IsActive() error = %v", err)
+	}
+	if !resp.Result {
+		t.Error("IsActive() = false, want true (queue depth 8 > threshold 1)")
+	}
+}
+
+func TestParseMetadata_VLLMMissingEndpoint(t *testing.T) {
+	_, err := parseMetadata(map[string]string{
+		"metricType": "vllm_queue_depth",
+	})
+	if err == nil {
+		t.Error("parseMetadata() should fail when vllmEndpoint is missing for vLLM metric")
+	}
+}
+
+func TestParseMetadata_VLLMWithEndpoint(t *testing.T) {
+	cfg, err := parseMetadata(map[string]string{
+		"metricType":   "vllm_queue_depth",
+		"vllmEndpoint": "http://vllm:8000/metrics",
+	})
+	if err != nil {
+		t.Fatalf("parseMetadata() error = %v", err)
+	}
+	if cfg.metricType != profiles.MetricVLLMQueueDepth {
+		t.Errorf("metricType = %v, want %v", cfg.metricType, profiles.MetricVLLMQueueDepth)
+	}
+	if cfg.vllmEndpoint != "http://vllm:8000/metrics" {
+		t.Errorf("vllmEndpoint = %v, want http://vllm:8000/metrics", cfg.vllmEndpoint)
+	}
+}
+
+func TestGetMetrics_VLLMQueueDepthProfile(t *testing.T) {
+	ts := fakeVLLMServer()
+	defer ts.Close()
+
+	s := NewGPUExternalScaler(gpu.NewMockCollector(testDevices), zap.NewNop())
+	resp, err := s.GetMetrics(context.Background(), &pb.GetMetricsRequest{
+		ScaledObjectRef: &pb.ScaledObjectRef{
+			Name: "vllm-profile-so",
+			ScalerMetadata: map[string]string{
+				"profile":      "vllm-queue-depth",
+				"vllmEndpoint": ts.URL,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("GetMetrics() error = %v", err)
+	}
+	if len(resp.MetricValues) == 0 {
+		t.Fatal("GetMetrics() returned no metric values")
+	}
+	if resp.MetricValues[0].MetricName != "keda_gpu_vllm_queue_depth" {
+		t.Errorf("metricName = %v, want keda_gpu_vllm_queue_depth", resp.MetricValues[0].MetricName)
+	}
+	if resp.MetricValues[0].MetricValueFloat != 8 {
+		t.Errorf("queue depth = %v, want 8", resp.MetricValues[0].MetricValueFloat)
 	}
 }

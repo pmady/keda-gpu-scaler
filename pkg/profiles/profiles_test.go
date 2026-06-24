@@ -98,12 +98,13 @@ func TestGetBuiltinProfiles(t *testing.T) {
 
 func TestList(t *testing.T) {
 	names := List()
-	if len(names) != 5 {
-		t.Errorf("List() returned %d profiles, want 5", len(names))
+	if len(names) != 6 {
+		t.Errorf("List() returned %d profiles, want 6", len(names))
 	}
 
 	expected := map[string]bool{
 		"vllm-inference":       false,
+		"vllm-queue-depth":     false,
 		"triton-inference":     false,
 		"training":             false,
 		"batch":                false,

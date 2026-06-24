@@ -43,6 +43,10 @@ const (
 	MetricPCIeRxKBps        MetricType = "pcie_rx_kbps"
 	MetricNVLinkTxMBps      MetricType = "nvlink_tx_mbps"
 	MetricNVLinkRxMBps      MetricType = "nvlink_rx_mbps"
+
+	// vLLM engine metrics — scraped from the vLLM /metrics endpoint, not NVML.
+	MetricVLLMQueueDepth   MetricType = "vllm_queue_depth"
+	MetricVLLMKVCacheUsage MetricType = "vllm_kv_cache_usage"
 )
 
 // AllMetricTypes returns every supported MetricType, in a stable order suitable
@@ -59,7 +63,14 @@ func AllMetricTypes() []MetricType {
 		MetricPCIeRxKBps,
 		MetricNVLinkTxMBps,
 		MetricNVLinkRxMBps,
+		MetricVLLMQueueDepth,
+		MetricVLLMKVCacheUsage,
 	}
+}
+
+// IsVLLMMetric reports whether t requires the vLLM engine endpoint rather than NVML.
+func IsVLLMMetric(t MetricType) bool {
+	return t == MetricVLLMQueueDepth || t == MetricVLLMKVCacheUsage
 }
 
 // ValidMetricType reports whether t is a recognized MetricType.
@@ -67,7 +78,8 @@ func ValidMetricType(t MetricType) bool {
 	switch t {
 	case MetricGPUUtilization, MetricMemoryUtilization, MetricMemoryUsedMiB,
 		MetricMemoryUsedPercent, MetricTemperature, MetricPowerDraw,
-		MetricPCIeTxKBps, MetricPCIeRxKBps, MetricNVLinkTxMBps, MetricNVLinkRxMBps:
+		MetricPCIeTxKBps, MetricPCIeRxKBps, MetricNVLinkTxMBps, MetricNVLinkRxMBps,
+		MetricVLLMQueueDepth, MetricVLLMKVCacheUsage:
 		return true
 	default:
 		return false
@@ -97,6 +109,17 @@ var builtinProfiles = map[string]Profile{
 		CooldownSeconds:    60,
 		ScaleUpStabilize:   15,
 		ScaleDownStabilize: 120,
+	},
+	"vllm-queue-depth": {
+		Name:               "vllm-queue-depth",
+		MetricName:         "keda_gpu_vllm_queue_depth",
+		Description:        "vLLM queue depth — scale on pending inference requests",
+		TargetValue:        5,
+		ActivationValue:    1,
+		MetricType:         MetricVLLMQueueDepth,
+		CooldownSeconds:    30,
+		ScaleUpStabilize:   10,
+		ScaleDownStabilize: 60,
 	},
 	"triton-inference": {
 		Name:               "triton-inference",

@@ -27,20 +27,23 @@ import (
 	pb "github.com/pmady/keda-gpu-scaler/pkg/externalscaler"
 	"github.com/pmady/keda-gpu-scaler/pkg/gpu"
 	"github.com/pmady/keda-gpu-scaler/pkg/profiles"
+	"github.com/pmady/keda-gpu-scaler/pkg/vllm"
 )
 
 // GPUExternalScaler implements the KEDA ExternalScaler gRPC interface.
 type GPUExternalScaler struct {
 	pb.UnimplementedExternalScalerServer
-	collector gpu.MetricsCollector
-	logger    *zap.Logger
+	collector   gpu.MetricsCollector
+	vllmClients map[string]*vllm.Client // keyed by endpoint URL
+	logger      *zap.Logger
 }
 
 // NewGPUExternalScaler creates a new GPU external scaler server.
 func NewGPUExternalScaler(collector gpu.MetricsCollector, logger *zap.Logger) *GPUExternalScaler {
 	return &GPUExternalScaler{
-		collector: collector,
-		logger:    logger,
+		collector:   collector,
+		vllmClients: make(map[string]*vllm.Client),
+		logger:      logger,
 	}
 }
 
@@ -132,6 +135,7 @@ type scalerConfig struct {
 	gpuIndex            int // -1 means aggregate all GPUs
 	aggregation         string
 	pollIntervalSeconds int
+	vllmEndpoint        string // e.g. "http://vllm-svc:8000/metrics"
 }
 
 func parseMetadata(metadata map[string]string) (scalerConfig, error) {
@@ -218,11 +222,35 @@ func parseMetadata(metadata map[string]string) (scalerConfig, error) {
 		}
 		cfg.pollIntervalSeconds = i
 	}
+	if v, ok := metadata["vllmEndpoint"]; ok {
+		cfg.vllmEndpoint = v
+	}
+
+	// vLLM metrics require the endpoint to be set.
+	if profiles.IsVLLMMetric(cfg.metricType) && cfg.vllmEndpoint == "" {
+		return cfg, fmt.Errorf("metricType %q requires vllmEndpoint to be set", cfg.metricType)
+	}
 
 	return cfg, nil
 }
 
+// getVLLMClient returns a cached vLLM client for the given endpoint, creating
+// one on first use.
+func (s *GPUExternalScaler) getVLLMClient(endpoint string) *vllm.Client {
+	if c, ok := s.vllmClients[endpoint]; ok {
+		return c
+	}
+	c := vllm.NewClient(endpoint, s.logger)
+	s.vllmClients[endpoint] = c
+	return c
+}
+
 func (s *GPUExternalScaler) getMetricValue(cfg scalerConfig) (float64, error) {
+	// vLLM metrics come from the engine HTTP endpoint, not NVML.
+	if profiles.IsVLLMMetric(cfg.metricType) {
+		return s.getVLLMMetricValue(cfg)
+	}
+
 	if cfg.gpuIndex >= 0 {
 		m, err := s.collector.CollectDevice(cfg.gpuIndex)
 		if err != nil {
@@ -260,6 +288,32 @@ func (s *GPUExternalScaler) logMetric(m gpu.Metrics, metricType profiles.MetricT
 		zap.String("metric_type", string(metricType)),
 		zap.Float64("value", value),
 	)
+}
+
+func (s *GPUExternalScaler) getVLLMMetricValue(cfg scalerConfig) (float64, error) {
+	c := s.getVLLMClient(cfg.vllmEndpoint)
+	m, err := c.Scrape()
+	if err != nil {
+		return 0, err
+	}
+
+	var value float64
+	switch cfg.metricType {
+	case profiles.MetricVLLMQueueDepth:
+		value = m.QueueDepth
+	case profiles.MetricVLLMKVCacheUsage:
+		value = m.KVCacheUsage * 100 // normalize 0-1 → 0-100 for KEDA target comparison
+	}
+
+	s.logger.Debug("scraped vLLM metric",
+		zap.String("endpoint", cfg.vllmEndpoint),
+		zap.String("metric_type", string(cfg.metricType)),
+		zap.Float64("value", value),
+		zap.Float64("queue_depth", m.QueueDepth),
+		zap.Float64("running", m.RunningCount),
+		zap.Float64("kv_cache", m.KVCacheUsage),
+	)
+	return value, nil
 }
 
 func extractMetric(m gpu.Metrics, metricType profiles.MetricType) float64 {
