@@ -25,6 +25,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -116,27 +117,32 @@ func main() {
 
 // printDryRun reports the resolved collection plan without initializing NVML.
 func printDryRun(w io.Writer, envCtx env.Context, format string, device int, interval time.Duration) {
-	fmt.Fprintln(w, "Dry run: showing the resolved configuration; NVML will not be initialized.")
-	fmt.Fprintln(w)
-	fmt.Fprintf(w, "Environment   : %s\n", envCtx.Orchestrator)
+	lines := []string{
+		"Dry run: showing the resolved configuration; NVML will not be initialized.",
+		"",
+		fmt.Sprintf("Environment   : %s", envCtx.Orchestrator),
+	}
 	if envCtx.NodeName != "" {
-		fmt.Fprintf(w, "Node          : %s\n", envCtx.NodeName)
+		lines = append(lines, fmt.Sprintf("Node          : %s", envCtx.NodeName))
 	}
 	if envCtx.JobID != "" {
-		fmt.Fprintf(w, "Job / Rank    : %s / %d\n", envCtx.JobID, envCtx.TaskRank)
+		lines = append(lines, fmt.Sprintf("Job / Rank    : %s / %d", envCtx.JobID, envCtx.TaskRank))
 	}
 	if envCtx.PodName != "" {
-		fmt.Fprintf(w, "Pod           : %s\n", envCtx.PodName)
+		lines = append(lines, fmt.Sprintf("Pod           : %s", envCtx.PodName))
 	}
 	if envCtx.Namespace != "" {
-		fmt.Fprintf(w, "Namespace     : %s\n", envCtx.Namespace)
+		lines = append(lines, fmt.Sprintf("Namespace     : %s", envCtx.Namespace))
 	}
 	if envCtx.Partition != "" {
-		fmt.Fprintf(w, "Partition     : %s\n", envCtx.Partition)
+		lines = append(lines, fmt.Sprintf("Partition     : %s", envCtx.Partition))
 	}
-	fmt.Fprintf(w, "Output format : %s\n", describeFormat(format))
-	fmt.Fprintf(w, "Device filter : %s\n", describeDeviceFilter(device, envCtx.VisibleDevices()))
-	fmt.Fprintf(w, "Interval      : %s\n", describeInterval(interval))
+	lines = append(lines,
+		fmt.Sprintf("Output format : %s", describeFormat(format)),
+		fmt.Sprintf("Device filter : %s", describeDeviceFilter(device, envCtx.VisibleDevices())),
+		fmt.Sprintf("Interval      : %s", describeInterval(interval)),
+	)
+	_, _ = fmt.Fprintln(w, strings.Join(lines, "\n"))
 }
 
 // describeFormat returns the output format, flagging unrecognized values that
