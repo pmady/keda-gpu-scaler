@@ -3,17 +3,22 @@
 BINARY_NAME := keda-gpu-scaler
 IMAGE_REPO := ghcr.io/pmady/keda-gpu-scaler
 IMAGE_TAG ?= latest
-VERSION ?= v0.1.0
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+BUILD_DATE ?= $(shell date -u +%Y-%m-%d)
 GOPATH := $(shell go env GOPATH)
+
+# Inject version metadata into the binaries at link time (see pkg/version).
+VERSION_PKG := github.com/pmady/keda-gpu-scaler/pkg/version
+LDFLAGS := -X $(VERSION_PKG).Version=$(VERSION) -X $(VERSION_PKG).BuildDate=$(BUILD_DATE)
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 build: ## Build the KEDA scaler binary (requires CGO for NVML)
-	CGO_ENABLED=1 go build -o bin/$(BINARY_NAME) ./cmd/keda-gpu-scaler/
+	CGO_ENABLED=1 go build -ldflags "$(LDFLAGS)" -o bin/$(BINARY_NAME) ./cmd/keda-gpu-scaler/
 
 build-metrics: ## Build the standalone GPU metrics CLI
-	CGO_ENABLED=1 go build -o bin/gpu-metrics ./cmd/gpu-metrics/
+	CGO_ENABLED=1 go build -ldflags "$(LDFLAGS)" -o bin/gpu-metrics ./cmd/gpu-metrics/
 
 build-all: build build-metrics ## Build all binaries
 

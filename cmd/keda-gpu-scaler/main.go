@@ -40,6 +40,7 @@ import (
 	"github.com/pmady/keda-gpu-scaler/pkg/metrics"
 	"github.com/pmady/keda-gpu-scaler/pkg/probes"
 	"github.com/pmady/keda-gpu-scaler/pkg/scaler"
+	"github.com/pmady/keda-gpu-scaler/pkg/version"
 )
 
 var (
@@ -47,10 +48,16 @@ var (
 	metricsPort = flag.Int("metrics-port", 9090, "Prometheus metrics HTTP port (0 to disable)")
 	probePort   = flag.Int("probe-port", 8081, "Health/readiness HTTP port (0 to disable)")
 	logLevel    = flag.String("log-level", "info", "Log level (debug, info, warn, error)")
+	showVersion = flag.Bool("version", false, "Print version information and exit")
 )
 
 func main() {
 	flag.Parse()
+
+	if version.Requested(*showVersion, flag.Args()) {
+		fmt.Println(version.String("keda-gpu-scaler"))
+		return
+	}
 
 	logger := initLogger(*logLevel)
 	defer func() { _ = logger.Sync() }()

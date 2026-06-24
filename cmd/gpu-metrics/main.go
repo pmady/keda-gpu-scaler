@@ -33,19 +33,26 @@ import (
 
 	"github.com/pmady/keda-gpu-scaler/pkg/env"
 	"github.com/pmady/keda-gpu-scaler/pkg/gpu"
+	"github.com/pmady/keda-gpu-scaler/pkg/version"
 )
 
 var (
-	format   = flag.String("format", "table", "Output format: table, json, csv")
-	interval = flag.Duration("interval", 0, "Collection interval (0 = one-shot)")
-	device   = flag.Int("device", -1, "GPU device index (-1 = all)")
-	quiet    = flag.Bool("quiet", false, "Suppress log output")
-	envFlag  = flag.String("env", "auto", "Environment: auto, k8s, slurm, flux, standalone")
-	dryRun   = flag.Bool("dry-run", false, "Print the resolved config and exit without initializing NVML")
+	format      = flag.String("format", "table", "Output format: table, json, csv")
+	interval    = flag.Duration("interval", 0, "Collection interval (0 = one-shot)")
+	device      = flag.Int("device", -1, "GPU device index (-1 = all)")
+	quiet       = flag.Bool("quiet", false, "Suppress log output")
+	envFlag     = flag.String("env", "auto", "Environment: auto, k8s, slurm, flux, standalone")
+	dryRun      = flag.Bool("dry-run", false, "Print the resolved config and exit without initializing NVML")
+	showVersion = flag.Bool("version", false, "Print version information and exit")
 )
 
 func main() {
 	flag.Parse()
+
+	if version.Requested(*showVersion, flag.Args()) {
+		fmt.Println(version.String("gpu-metrics"))
+		return
+	}
 
 	logger := zap.NewNop()
 	if !*quiet {
