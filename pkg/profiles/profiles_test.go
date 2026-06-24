@@ -122,6 +122,26 @@ func TestList(t *testing.T) {
 	}
 }
 
+func TestValidMetricType(t *testing.T) {
+	// Every type returned by AllMetricTypes must be considered valid.
+	all := AllMetricTypes()
+	if len(all) == 0 {
+		t.Fatal("AllMetricTypes() returned no types")
+	}
+	for _, mt := range all {
+		if !ValidMetricType(mt) {
+			t.Errorf("ValidMetricType(%q) = false, want true", mt)
+		}
+	}
+
+	invalid := []MetricType{"", "gpu_utilzation", "GPU_UTILIZATION", "unknown"}
+	for _, mt := range invalid {
+		if ValidMetricType(mt) {
+			t.Errorf("ValidMetricType(%q) = true, want false", mt)
+		}
+	}
+}
+
 func TestProfileActivationValues(t *testing.T) {
 	// training profile should have 0 activation (no scale-to-zero)
 	training, _ := Get("training")

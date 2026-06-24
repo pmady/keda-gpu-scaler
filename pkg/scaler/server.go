@@ -160,7 +160,11 @@ func parseMetadata(metadata map[string]string) (scalerConfig, error) {
 		cfg.metricName = v
 	}
 	if v, ok := metadata["metricType"]; ok {
-		cfg.metricType = profiles.MetricType(v)
+		mt := profiles.MetricType(v)
+		if !profiles.ValidMetricType(mt) {
+			return cfg, fmt.Errorf("invalid metricType %q: must be one of %v", v, profiles.AllMetricTypes())
+		}
+		cfg.metricType = mt
 	}
 	if v, ok := metadata["targetValue"]; ok {
 		f, err := strconv.ParseFloat(v, 64)

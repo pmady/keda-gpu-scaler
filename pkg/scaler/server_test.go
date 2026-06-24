@@ -170,6 +170,28 @@ func TestParseMetadata(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name: "invalid metricType typo",
+			metadata: map[string]string{
+				"metricType": "gpu_utilzation",
+			},
+			wantErr: true,
+		},
+		{
+			name: "valid non-default metricType",
+			metadata: map[string]string{
+				"metricType": "temperature",
+			},
+			want: scalerConfig{
+				metricName:          "keda_gpu_metric",
+				metricType:          profiles.MetricTemperature,
+				targetValue:         80,
+				activationThreshold: 0,
+				gpuIndex:            -1,
+				aggregation:         "max",
+				pollIntervalSeconds: 10,
+			},
+		},
 	}
 
 	for _, tt := range tests {

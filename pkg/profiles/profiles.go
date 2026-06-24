@@ -45,6 +45,35 @@ const (
 	MetricNVLinkRxMBps MetricType = "nvlink_rx_mbps"
 )
 
+// AllMetricTypes returns every supported MetricType, in a stable order suitable
+// for inclusion in user-facing error messages.
+func AllMetricTypes() []MetricType {
+	return []MetricType{
+		MetricGPUUtilization,
+		MetricMemoryUtilization,
+		MetricMemoryUsedMiB,
+		MetricMemoryUsedPercent,
+		MetricTemperature,
+		MetricPowerDraw,
+		MetricPCIeTxKBps,
+		MetricPCIeRxKBps,
+		MetricNVLinkTxMBps,
+		MetricNVLinkRxMBps,
+	}
+}
+
+// ValidMetricType reports whether t is a recognized MetricType.
+func ValidMetricType(t MetricType) bool {
+	switch t {
+	case MetricGPUUtilization, MetricMemoryUtilization, MetricMemoryUsedMiB,
+		MetricMemoryUsedPercent, MetricTemperature, MetricPowerDraw,
+		MetricPCIeTxKBps, MetricPCIeRxKBps, MetricNVLinkTxMBps, MetricNVLinkRxMBps:
+		return true
+	default:
+		return false
+	}
+}
+
 // Built-in profiles for common AI/ML workloads.
 var builtinProfiles = map[string]Profile{
 	"distributed-training": {
