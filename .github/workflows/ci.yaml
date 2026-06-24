@@ -48,7 +48,25 @@ jobs:
         run: CGO_ENABLED=1 go build -v ./cmd/keda-gpu-scaler/
 
       - name: Test
-        run: go test -v -race ./pkg/...
+        run: go test -v -race -covermode=atomic -coverprofile=coverage.out ./...
+
+      - name: Report coverage
+        if: matrix.arch == 'amd64'
+        run: |
+          go tool cover -func=coverage.out
+          total=$(go tool cover -func=coverage.out | tail -1 | awk '{print $NF}')
+          echo "Total coverage: ${total}"
+          {
+            echo "### Test coverage: ${total}"
+            echo ""
+            echo "<details><summary>Per-function coverage</summary>"
+            echo ""
+            echo '```'
+            go tool cover -func=coverage.out
+            echo '```'
+            echo ""
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Vet
         run: go vet ./...

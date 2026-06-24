@@ -22,8 +22,8 @@ proto: ## Generate protobuf Go code
 		--go-grpc_out=pkg/externalscaler --go-grpc_opt=paths=source_relative \
 		-Iproto externalscaler.proto
 
-test: ## Run unit tests
-	go test -v -race ./pkg/...
+test: ## Run unit tests (pkg + cmd; e2e is build-tagged out, run via test-e2e)
+	go test -v -race ./...
 
 test-e2e: ## Run e2e integration tests (no GPU required — uses mock collector)
 	go test -v -tags=e2e -race ./tests/e2e/...
