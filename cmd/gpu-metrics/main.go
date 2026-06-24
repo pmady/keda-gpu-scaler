@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"strconv"
@@ -34,11 +35,12 @@ import (
 )
 
 var (
-	format  = flag.String("format", "table", "Output format: table, json, csv")
+	format   = flag.String("format", "table", "Output format: table, json, csv")
 	interval = flag.Duration("interval", 0, "Collection interval (0 = one-shot)")
-	device  = flag.Int("device", -1, "GPU device index (-1 = all)")
-	quiet   = flag.Bool("quiet", false, "Suppress log output")
-	envFlag = flag.String("env", "auto", "Environment: auto, k8s, slurm, flux, standalone")
+	device   = flag.Int("device", -1, "GPU device index (-1 = all)")
+	quiet    = flag.Bool("quiet", false, "Suppress log output")
+	envFlag  = flag.String("env", "auto", "Environment: auto, k8s, slurm, flux, standalone")
+	dryRun   = flag.Bool("dry-run", false, "Print the resolved config and exit without initializing NVML")
 )
 
 func main() {
@@ -54,6 +56,13 @@ func main() {
 	// Resolve environment context once at startup.
 	envType := env.Parse(*envFlag)
 	envCtx := env.FromType(envType)
+
+	// --dry-run: report the resolved collection plan and exit before touching
+	// NVML, so users can verify their config on machines without a GPU/driver.
+	if *dryRun {
+		printDryRun(os.Stdout, envCtx, *format, *device, *interval)
+		return
+	}
 
 	if !*quiet {
 		logger.Info("Environment detected",
@@ -103,6 +112,62 @@ func main() {
 		case <-ticker.C:
 		}
 	}
+}
+
+// printDryRun reports the resolved collection plan without initializing NVML.
+func printDryRun(w io.Writer, envCtx env.Context, format string, device int, interval time.Duration) {
+	fmt.Fprintln(w, "Dry run: showing the resolved configuration; NVML will not be initialized.")
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "Environment   : %s\n", envCtx.Orchestrator)
+	if envCtx.NodeName != "" {
+		fmt.Fprintf(w, "Node          : %s\n", envCtx.NodeName)
+	}
+	if envCtx.JobID != "" {
+		fmt.Fprintf(w, "Job / Rank    : %s / %d\n", envCtx.JobID, envCtx.TaskRank)
+	}
+	if envCtx.PodName != "" {
+		fmt.Fprintf(w, "Pod           : %s\n", envCtx.PodName)
+	}
+	if envCtx.Namespace != "" {
+		fmt.Fprintf(w, "Namespace     : %s\n", envCtx.Namespace)
+	}
+	if envCtx.Partition != "" {
+		fmt.Fprintf(w, "Partition     : %s\n", envCtx.Partition)
+	}
+	fmt.Fprintf(w, "Output format : %s\n", describeFormat(format))
+	fmt.Fprintf(w, "Device filter : %s\n", describeDeviceFilter(device, envCtx.VisibleDevices()))
+	fmt.Fprintf(w, "Interval      : %s\n", describeInterval(interval))
+}
+
+// describeFormat returns the output format, flagging unrecognized values that
+// would silently fall back to the table renderer (see output()).
+func describeFormat(format string) string {
+	switch format {
+	case "table", "json", "csv":
+		return format
+	default:
+		return fmt.Sprintf("%q (unrecognized — will fall back to table)", format)
+	}
+}
+
+// describeDeviceFilter mirrors collect()'s selection precedence:
+// --device flag > scheduler-assigned GPUs > all GPUs.
+func describeDeviceFilter(device int, visible []int) string {
+	if device >= 0 {
+		return fmt.Sprintf("device %d (from --device)", device)
+	}
+	if len(visible) > 0 {
+		return fmt.Sprintf("scheduler-assigned devices %v", visible)
+	}
+	return "all GPUs"
+}
+
+// describeInterval renders the collection cadence.
+func describeInterval(d time.Duration) string {
+	if d <= 0 {
+		return "one-shot (single collection)"
+	}
+	return fmt.Sprintf("every %s (continuous)", d)
 }
 
 // collect gathers metrics for the appropriate set of GPUs.
