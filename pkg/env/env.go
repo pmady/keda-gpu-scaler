@@ -57,14 +57,28 @@ type Context struct {
 	FluxURI string `json:"flux_uri,omitempty"`
 
 	// visibleDevices is not serialised; used to restrict GPU collection to
-	// scheduler-assigned devices.
+	// scheduler-assigned integer device indices.
 	visibleDevices []int
+
+	// migUUIDs is not serialised; holds MIG instance UUIDs assigned by the
+	// scheduler (e.g. CUDA_VISIBLE_DEVICES="MIG-GPU-aaaa/3/0,MIG-GPU-aaaa/4/0").
+	// When non-empty it takes priority over visibleDevices for GPU collection.
+	migUUIDs []string
 }
 
-// VisibleDevices returns the GPU device indices assigned by the scheduler.
-// Returns nil when no assignment is detected — callers should collect all GPUs.
+// VisibleDevices returns the integer GPU device indices assigned by the scheduler.
+// Returns nil when no integer assignment is detected — callers should fall back
+// to MIGUUIDs() or collect all GPUs.
 func (c Context) VisibleDevices() []int {
 	return c.visibleDevices
+}
+
+// MIGUUIDs returns the MIG instance UUIDs assigned by the scheduler.
+// Non-empty only in HPC environments (SLURM, Flux) when the job was allocated
+// MIG-partitioned GPU instances. When non-empty, callers should use
+// CollectByUUID instead of CollectDevice or CollectAll.
+func (c Context) MIGUUIDs() []string {
+	return c.migUUIDs
 }
 
 // Header returns column labels for the environment portion of CSV / table output.
@@ -133,6 +147,7 @@ func FromType(t Type) Context {
 			TaskRank:       j.ProcID,
 			Partition:      j.Partition,
 			visibleDevices: j.VisibleDevices(),
+			migUUIDs:       j.MIGUUIDs(),
 		}
 
 	case Flux:
@@ -143,6 +158,7 @@ func FromType(t Type) Context {
 			TaskRank:       j.TaskRank,
 			FluxURI:        j.URI,
 			visibleDevices: j.VisibleDevices(),
+			migUUIDs:       j.MIGUUIDs(),
 		}
 
 	case Kubernetes:

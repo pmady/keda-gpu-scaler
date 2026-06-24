@@ -66,6 +66,21 @@ func (ic *InstrumentedCollector) CollectDevice(index int) (gpu.Metrics, error) {
 	return m, nil
 }
 
+func (ic *InstrumentedCollector) CollectByUUID(uuid string) (gpu.Metrics, error) {
+	start := time.Now()
+	CollectionsTotal.Inc()
+
+	m, err := ic.inner.CollectByUUID(uuid)
+	CollectionDuration.Observe(time.Since(start).Seconds())
+	if err != nil {
+		CollectionErrorsTotal.Inc()
+		return m, err
+	}
+
+	recordGauges(m)
+	return m, nil
+}
+
 func (ic *InstrumentedCollector) DeviceCount() (int, error) {
 	return ic.inner.DeviceCount()
 }

@@ -170,6 +170,28 @@ func TestParseMetadata(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name: "invalid metricType typo",
+			metadata: map[string]string{
+				"metricType": "gpu_utilzation",
+			},
+			wantErr: true,
+		},
+		{
+			name: "valid non-default metricType",
+			metadata: map[string]string{
+				"metricType": "temperature",
+			},
+			want: scalerConfig{
+				metricName:          "keda_gpu_metric",
+				metricType:          profiles.MetricTemperature,
+				targetValue:         80,
+				activationThreshold: 0,
+				gpuIndex:            -1,
+				aggregation:         "max",
+				pollIntervalSeconds: 10,
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -476,6 +498,100 @@ func TestGetMetrics(t *testing.T) {
 			name:     "single GPU nvlink tx",
 			metadata: map[string]string{"gpuIndex": "1", "metricType": "nvlink_tx_mbps"},
 			want:     200,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp, err := s.GetMetrics(context.Background(), &pb.GetMetricsRequest{
+				ScaledObjectRef: &pb.ScaledObjectRef{
+					Name:           "test-so",
+					ScalerMetadata: tt.metadata,
+				},
+			})
+			if err != nil {
+				t.Fatalf("GetMetrics() error = %v", err)
+			}
+			if len(resp.MetricValues) != 1 {
+				t.Fatalf("expected 1 metric value, got %d", len(resp.MetricValues))
+			}
+			if resp.MetricValues[0].MetricValueFloat != tt.want {
+				t.Errorf("MetricValueFloat = %v, want %v", resp.MetricValues[0].MetricValueFloat, tt.want)
+			}
+		})
+	}
+}
+
+// migTestDevices simulates a single A100 partitioned into two MIG instances.
+// Shared physical metrics (temperature, power) are identical across both instances;
+// per-instance metrics (utilization, memory) differ.
+var migTestDevices = []gpu.Metrics{
+	{
+		Index:              0,
+		UUID:               "MIG-GPU-aaaa/3/0",
+		Name:               "MIG 3g.40gb",
+		IsMIGInstance:      true,
+		ParentIndex:        0,
+		MigProfile:         "3g.40gb",
+		GPUUtilization:     85,
+		MemoryUtilization:  70,
+		MemoryUsedMiB:      30720,
+		MemoryTotalMiB:     40960,
+		TemperatureCelsius: 72,
+		PowerDrawWatts:     300,
+		PowerLimitWatts:    400,
+	},
+	{
+		Index:              1,
+		UUID:               "MIG-GPU-aaaa/4/0",
+		Name:               "MIG 3g.40gb",
+		IsMIGInstance:      true,
+		ParentIndex:        0,
+		MigProfile:         "3g.40gb",
+		GPUUtilization:     10,
+		MemoryUtilization:  5,
+		MemoryUsedMiB:      2048,
+		MemoryTotalMiB:     40960,
+		TemperatureCelsius: 72,
+		PowerDrawWatts:     300,
+		PowerLimitWatts:    400,
+	},
+}
+
+func TestGetMetrics_MIGInstances(t *testing.T) {
+	s := newTestScaler(migTestDevices)
+
+	tests := []struct {
+		name     string
+		metadata map[string]string
+		want     float64
+	}{
+		{
+			name:     "max GPU util across MIG instances",
+			metadata: map[string]string{},
+			want:     85, // max(85, 10)
+		},
+		{
+			name:     "avg GPU util across MIG instances",
+			metadata: map[string]string{"aggregation": "avg"},
+			want:     47.5, // (85+10)/2
+		},
+		{
+			name:     "min GPU util across MIG instances",
+			metadata: map[string]string{"aggregation": "min"},
+			want:     10,
+		},
+		{
+			name:     "sum memory used across MIG instances",
+			metadata: map[string]string{"metricType": "memory_used_mib", "aggregation": "sum"},
+			want:     32768, // 30720+2048
+		},
+		{
+			// Shared physical metric: both instances carry the same temperature.
+			// Max and min should both return 72.
+			name:     "temperature shared across MIG instances",
+			metadata: map[string]string{"metricType": "temperature", "aggregation": "max"},
+			want:     72,
 		},
 	}
 

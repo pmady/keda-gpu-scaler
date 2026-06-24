@@ -72,21 +72,37 @@ func (j JobContext) Row() []string {
 }
 
 // VisibleDevices parses GPUs into a slice of integer device indices.
-// Non-numeric entries (e.g. MIG UUIDs) are silently skipped because
-// per-instance MIG metrics are not yet supported.
+// MIG UUIDs (e.g. "MIG-GPU-…/3/0") are skipped; use MIGUUIDs() for those.
 func (j JobContext) VisibleDevices() []int {
 	if j.GPUs == "" {
 		return nil
 	}
-	parts := strings.Split(j.GPUs, ",")
-	devs := make([]int, 0, len(parts))
-	for _, p := range parts {
+	var devs []int
+	for _, p := range strings.Split(j.GPUs, ",") {
 		p = strings.TrimSpace(p)
 		if idx, err := strconv.Atoi(p); err == nil {
 			devs = append(devs, idx)
 		}
 	}
 	return devs
+}
+
+// MIGUUIDs returns the MIG instance UUIDs from CUDA_VISIBLE_DEVICES.
+// Flux sets CUDA_VISIBLE_DEVICES to a comma-separated list of MIG UUIDs
+// (e.g. "MIG-GPU-aaaa/3/0,MIG-GPU-aaaa/4/0") when the job is submitted
+// with MIG-partitioned GPUs. Integer entries are ignored.
+func (j JobContext) MIGUUIDs() []string {
+	if j.GPUs == "" {
+		return nil
+	}
+	var uuids []string
+	for _, p := range strings.Split(j.GPUs, ",") {
+		p = strings.TrimSpace(p)
+		if strings.HasPrefix(p, "MIG-") {
+			uuids = append(uuids, p)
+		}
+	}
+	return uuids
 }
 
 // fluxGPUs reads the GPU device indices allocated to this Flux task.

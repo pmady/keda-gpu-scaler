@@ -61,7 +61,9 @@ Any distribution with NVIDIA GPU nodes and KEDA v2.10+. Tested on:
 
 ## Does this work with MIG (Multi-Instance GPU)?
 
-Not yet. MIG support is on the [roadmap](../README.md#roadmap). Each MIG instance exposes separate NVML handles, so the scaler would need to enumerate partitions within a physical GPU.
+Yes. `CollectAll()` auto-detects MIG-enabled GPUs and returns one `Metrics` per compute instance. In HPC environments (SLURM/Flux), MIG UUIDs in `CUDA_VISIBLE_DEVICES` are resolved individually via `CollectByUUID()`.
+
+Chip-level metrics (temp, power, PCIe, NVLink) are read from the parent GPU and shared across all instances. Each MIG entry has `IsMIGInstance: true`, `ParentIndex`, and `MigProfile` (e.g. `"3g.40gb"`).
 
 ## What happens if the scaler pod crashes?
 

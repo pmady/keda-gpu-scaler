@@ -20,8 +20,8 @@ Technical direction for keda-gpu-scaler. Updated as priorities shift.
 
 ## Next (v0.6.0 — August 2026)
 
+- ✅ **MIG support** — Per-instance metrics for Multi-Instance GPU partitions. `CollectAll` enumerates MIG compute instances automatically; HPC environments resolve MIG UUIDs via `CollectByUUID`. ([#26](https://github.com/pmady/keda-gpu-scaler/issues/26))
 - **New scaling profiles** — TGI, Ollama ([#64](https://github.com/pmady/keda-gpu-scaler/issues/64), [#65](https://github.com/pmady/keda-gpu-scaler/issues/65))
-- **MIG support** — Per-instance metrics for Multi-Instance GPU partitions ([#26](https://github.com/pmady/keda-gpu-scaler/issues/26))
 - **vLLM queue depth** — Scale on pending requests via vLLM engine API ([#28](https://github.com/pmady/keda-gpu-scaler/issues/28))
 - **Improved aggregation** — p95, p99 percentile methods ([#69](https://github.com/pmady/keda-gpu-scaler/issues/69))
 - **CI/CD hardening** — golangci-lint config, go vet, test coverage, pre-commit hooks ([#72](https://github.com/pmady/keda-gpu-scaler/issues/72), [#73](https://github.com/pmady/keda-gpu-scaler/issues/73), [#74](https://github.com/pmady/keda-gpu-scaler/issues/74), [#76](https://github.com/pmady/keda-gpu-scaler/issues/76))

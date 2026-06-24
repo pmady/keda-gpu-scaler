@@ -177,7 +177,11 @@ func describeInterval(d time.Duration) string {
 }
 
 // collect gathers metrics for the appropriate set of GPUs.
-// Priority: --device flag > scheduler-assigned GPUs > all GPUs.
+// Priority order:
+//  1. --device flag (explicit index override)
+//  2. Scheduler-assigned MIG UUIDs (HPC MIG jobs: CUDA_VISIBLE_DEVICES=MIG-…)
+//  3. Scheduler-assigned integer device indices (HPC integer jobs)
+//  4. All GPUs on the node (CollectAll handles per-instance MIG enumeration)
 func collect(c gpu.MetricsCollector, envCtx env.Context) ([]gpu.Metrics, error) {
 	if *device >= 0 {
 		m, err := c.CollectDevice(*device)
@@ -187,11 +191,31 @@ func collect(c gpu.MetricsCollector, envCtx env.Context) ([]gpu.Metrics, error) 
 		return []gpu.Metrics{m}, nil
 	}
 
+	// HPC MIG: scheduler assigned specific MIG compute instances by UUID.
+	if uuids := envCtx.MIGUUIDs(); len(uuids) > 0 {
+		return collectByUUIDs(c, uuids)
+	}
+
+	// HPC integer indices.
 	if devs := envCtx.VisibleDevices(); len(devs) > 0 {
 		return collectDevices(c, devs)
 	}
 
+	// Default: collect all (handles MIG enumeration internally for K8s / standalone).
 	return c.CollectAll()
+}
+
+// collectByUUIDs collects metrics for each MIG UUID assigned by the scheduler.
+func collectByUUIDs(c gpu.MetricsCollector, uuids []string) ([]gpu.Metrics, error) {
+	out := make([]gpu.Metrics, 0, len(uuids))
+	for _, uuid := range uuids {
+		m, err := c.CollectByUUID(uuid)
+		if err != nil {
+			return nil, fmt.Errorf("uuid %s: %w", uuid, err)
+		}
+		out = append(out, m)
+	}
+	return out, nil
 }
 
 // collectDevices collects metrics for an explicit list of device indices.
@@ -273,19 +297,34 @@ func outputTable(metrics []gpu.Metrics, envCtx env.Context) {
 	fmt.Println()
 
 	// GPU table.
-	fmt.Printf("%-5s %-20s %6s %6s %10s %10s %6s %6s %10s %10s %10s %10s\n",
+	fmt.Printf("%-5s %-22s %6s %6s %10s %10s %6s %6s %10s %10s %10s %10s\n",
 		"GPU", "Name", "Util%", "Mem%", "MemUsed", "MemTotal", "Temp", "Power",
 		"PCIeTx", "PCIeRx", "NVLTx", "NVLRx")
-	fmt.Println("---   ----                 -----  -----  ---------  ---------  -----  -----  ---------  ---------  ---------  ---------")
+	fmt.Println("---   ----------------------  -----  -----  ---------  ---------  -----  -----  ---------  ---------  ---------  ---------")
 	for _, m := range metrics {
-		fmt.Printf("%-5d %-20s %5d%% %5d%% %7dMiB %7dMiB %4d°C %4dW %7dKB/s %7dKB/s %7dMB/s %7dMB/s\n",
-			m.Index, truncate(m.Name, 20),
+		// Annotate MIG instances with their profile and parent GPU index.
+		label := tableGPULabel(m)
+		fmt.Printf("%-5s %-22s %5d%% %5d%% %7dMiB %7dMiB %4d°C %4dW %7dKB/s %7dKB/s %7dMB/s %7dMB/s\n",
+			label, truncate(m.Name, 22),
 			m.GPUUtilization, m.MemoryUtilization,
 			m.MemoryUsedMiB, m.MemoryTotalMiB,
 			m.TemperatureCelsius, m.PowerDrawWatts,
 			m.PCIeTxKBps, m.PCIeRxKBps,
 			m.NVLinkTxMBps, m.NVLinkRxMBps)
 	}
+}
+
+// tableGPULabel returns the value printed in the GPU column.
+// MIG instances are shown as "gpu<parent>/inst<idx>" (e.g. "gpu0/inst2")
+// so that it is immediately clear which physical GPU the instance belongs to.
+func tableGPULabel(m gpu.Metrics) string {
+	if m.IsMIGInstance {
+		if m.ParentIndex >= 0 {
+			return fmt.Sprintf("gpu%d/inst%d", m.ParentIndex, m.Index)
+		}
+		return fmt.Sprintf("mig/%d", m.Index)
+	}
+	return strconv.Itoa(m.Index)
 }
 
 func csvHeader() []string {
@@ -295,10 +334,20 @@ func csvHeader() []string {
 		"temp_c", "power_w", "power_limit_w",
 		"pcie_tx_kbps", "pcie_rx_kbps",
 		"nvlink_tx_mbps", "nvlink_rx_mbps",
+		// MIG fields (empty for non-MIG rows)
+		"is_mig_instance", "parent_index", "mig_profile",
 	}
 }
 
 func csvRow(m gpu.Metrics) []string {
+	parentIdx := ""
+	migProfile := ""
+	isMIG := "false"
+	if m.IsMIGInstance {
+		isMIG = "true"
+		parentIdx = strconv.Itoa(m.ParentIndex)
+		migProfile = m.MigProfile
+	}
 	return []string{
 		strconv.Itoa(m.Index), m.UUID, m.Name,
 		strconv.FormatUint(uint64(m.GPUUtilization), 10),
@@ -312,6 +361,7 @@ func csvRow(m gpu.Metrics) []string {
 		strconv.FormatUint(uint64(m.PCIeRxKBps), 10),
 		strconv.FormatUint(m.NVLinkTxMBps, 10),
 		strconv.FormatUint(m.NVLinkRxMBps, 10),
+		isMIG, parentIdx, migProfile,
 	}
 }
 

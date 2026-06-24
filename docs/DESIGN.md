@@ -156,9 +156,20 @@ For Kubernetes, `NODE_NAME`, `POD_NAME`, and `POD_NAMESPACE` must be exposed via
 - No secrets or credentials are required
 - NVML calls are read-only (metrics collection, no device configuration)
 
+## MIG (Multi-Instance GPU) Support (`pkg/gpu`)
+
+A100/H100 GPUs can be split into 2–7 MIG instances. Each gets its own NVML handle with independent utilization and memory counters.
+
+**K8s / Standalone:** `CollectAll()` checks each GPU for MIG mode. When active, it loops `GetMigDeviceHandleByIndex` and returns one `Metrics` per instance instead of one per physical GPU. Chip-level metrics (temp, power, PCIe, NVLink) are read once from the physical handle and copied into each instance.
+
+**HPC (SLURM / Flux):** MIG UUIDs in `CUDA_VISIBLE_DEVICES` (e.g. `MIG-GPU-aaaa.../3/0`) are detected by `MIGUUIDs()` and resolved individually via `CollectByUUID()`.
+
+Extra `Metrics` fields: `IsMIGInstance` (bool), `ParentIndex` (int, -1 for UUID lookups), `MigProfile` (string, e.g. `"3g.40gb"`).
+
+If MIG is enabled but no instances exist (GPU not yet partitioned), `collectMIGInstances` logs a warning and returns nothing. `CollectDevice()` on MIG GPUs returns physical-level metrics only and logs a warning.
+
 ## Future Work
 
 - **AMD ROCm support**: Same DaemonSet pattern, different hardware library (`rocm-smi`)
-- **MIG metrics**: NVIDIA Multi-Instance GPU partitions each have their own utilization metrics
 - **NVLink topology**: Prefer scaling on nodes with direct GPU-to-GPU interconnect
 - **vLLM queue depth**: Read pending request count directly from vLLM's engine API for more precise scaling

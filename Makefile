@@ -1,4 +1,4 @@
-.PHONY: build proto test test-e2e lint clean docker-build docker-push docker-release deploy undeploy helm-lint helm-template helm-test help
+.PHONY: build proto test test-e2e fmt check-fmt lint clean docker-build docker-push docker-release deploy undeploy helm-lint helm-template helm-test help
 
 BINARY_NAME := keda-gpu-scaler
 IMAGE_REPO := ghcr.io/pmady/keda-gpu-scaler
@@ -28,8 +28,22 @@ test: ## Run unit tests
 test-e2e: ## Run e2e integration tests (no GPU required — uses mock collector)
 	go test -v -tags=e2e -race ./tests/e2e/...
 
+fmt: ## Format Go source files
+	go fmt ./...
+
+check-fmt: ## Check formatting without modifying files (fails if any file needs gofmt)
+	@unformatted=$$(gofmt -l .); \
+	if [ -n "$$unformatted" ]; then \
+		echo "Files need formatting (run 'make fmt'):"; \
+		echo "$$unformatted"; \
+		exit 1; \
+	fi
+
 lint: ## Run linter
 	golangci-lint run ./...
+
+vet: ## Run vet
+	go vet ./...
 
 clean: ## Remove build artifacts
 	rm -rf bin/

@@ -34,6 +34,31 @@ make lint     # Run golangci-lint
 make proto    # Regenerate protobuf Go code
 ```
 
+### Pre-commit Hooks
+
+This repository ships a [pre-commit](https://pre-commit.com) configuration
+(`.pre-commit-config.yaml`) that catches trailing whitespace, missing final
+newlines, and Go formatting issues before you push. Install it once:
+
+```bash
+pip install pre-commit   # or: brew install pre-commit
+pre-commit install       # set up the git hook in your clone
+```
+
+The hooks then run automatically on every `git commit`. To run them against the
+whole tree on demand:
+
+```bash
+pre-commit run --all-files
+```
+
+`golangci-lint` is configured as a `manual` hook (it can be slow), so it does
+not run on every commit. Invoke it explicitly when you want it:
+
+```bash
+pre-commit run --hook-stage manual golangci-lint
+```
+
 > [!NOTE]
 > The compiled binaries (`keda-gpu-scaler` and `gpu-metrics`) dynamically link NVIDIA's NVML library (`libnvidia-ml.so`) at runtime. **They will fail to start on any machine that does not have the NVIDIA driver installed** — for example, a laptop or CI runner with no NVIDIA GPU. You can still build, lint, and run the full test suite without a GPU; all tests use a mock collector.
 

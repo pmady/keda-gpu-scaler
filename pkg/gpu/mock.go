@@ -39,6 +39,15 @@ func (m *MockCollector) CollectDevice(index int) (Metrics, error) {
 	return m.Devices[index], nil
 }
 
+func (m *MockCollector) CollectByUUID(uuid string) (Metrics, error) {
+	for _, d := range m.Devices {
+		if d.UUID == uuid {
+			return d, nil
+		}
+	}
+	return Metrics{}, fmt.Errorf("device with UUID %q not found", uuid)
+}
+
 func (m *MockCollector) DeviceCount() (int, error) {
 	return len(m.Devices), nil
 }

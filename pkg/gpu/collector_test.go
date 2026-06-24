@@ -180,3 +180,197 @@ func TestCollectDeviceBoundary(t *testing.T) {
 		t.Error("CollectDevice(1) should fail for single-device collector")
 	}
 }
+
+// --- MIG tests ---
+
+var migDevices = []Metrics{
+	// Physical GPU 0 — MIG disabled, standard collection
+	{
+		Index:          0,
+		UUID:           "GPU-aaaa-1111",
+		Name:           "NVIDIA A100-SXM4-80GB",
+		GPUUtilization: 50,
+		MemoryUsedMiB:  10240,
+		MemoryTotalMiB: 81920,
+	},
+	// MIG instance 0 on physical GPU 1
+	{
+		Index:              0,
+		UUID:               "MIG-GPU-bbbb-2222/3/0",
+		Name:               "MIG 3g.40gb",
+		GPUUtilization:     85,
+		MemoryUtilization:  70,
+		MemoryUsedMiB:      30720,
+		MemoryTotalMiB:     40960,
+		TemperatureCelsius: 72, // shared from physical GPU
+		PowerDrawWatts:     300,
+		IsMIGInstance:      true,
+		ParentIndex:        1,
+		MigProfile:         "3g.40gb",
+	},
+	// MIG instance 1 on physical GPU 1
+	{
+		Index:              1,
+		UUID:               "MIG-GPU-bbbb-2222/4/0",
+		Name:               "MIG 3g.40gb",
+		GPUUtilization:     10,
+		MemoryUtilization:  5,
+		MemoryUsedMiB:      2048,
+		MemoryTotalMiB:     40960,
+		TemperatureCelsius: 72, // shared from physical GPU
+		PowerDrawWatts:     300,
+		IsMIGInstance:      true,
+		ParentIndex:        1,
+		MigProfile:         "3g.40gb",
+	},
+}
+
+func TestMockCollector_CollectAll_IncludesMIGInstances(t *testing.T) {
+	c := NewMockCollector(migDevices)
+	got, err := c.CollectAll()
+	if err != nil {
+		t.Fatalf("CollectAll() error = %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("CollectAll() returned %d entries, want 3 (1 physical + 2 MIG)", len(got))
+	}
+
+	physical := got[0]
+	if physical.IsMIGInstance {
+		t.Error("got[0] IsMIGInstance = true, want false (physical GPU)")
+	}
+
+	mig0 := got[1]
+	if !mig0.IsMIGInstance {
+		t.Error("got[1] IsMIGInstance = false, want true (MIG instance)")
+	}
+	if mig0.MigProfile != "3g.40gb" {
+		t.Errorf("got[1] MigProfile = %q, want %q", mig0.MigProfile, "3g.40gb")
+	}
+	if mig0.ParentIndex != 1 {
+		t.Errorf("got[1] ParentIndex = %d, want 1", mig0.ParentIndex)
+	}
+}
+
+func TestMockCollector_CollectByUUID_StandardGPU(t *testing.T) {
+	c := NewMockCollector(migDevices)
+
+	got, err := c.CollectByUUID("GPU-aaaa-1111")
+	if err != nil {
+		t.Fatalf("CollectByUUID() error = %v", err)
+	}
+	if got.UUID != "GPU-aaaa-1111" {
+		t.Errorf("UUID = %q, want %q", got.UUID, "GPU-aaaa-1111")
+	}
+	if got.IsMIGInstance {
+		t.Error("IsMIGInstance = true, want false for standard GPU UUID")
+	}
+}
+
+func TestMockCollector_CollectByUUID_MIGInstance(t *testing.T) {
+	c := NewMockCollector(migDevices)
+
+	got, err := c.CollectByUUID("MIG-GPU-bbbb-2222/3/0")
+	if err != nil {
+		t.Fatalf("CollectByUUID() error = %v", err)
+	}
+	if !got.IsMIGInstance {
+		t.Error("IsMIGInstance = false, want true for MIG UUID")
+	}
+	if got.MigProfile != "3g.40gb" {
+		t.Errorf("MigProfile = %q, want %q", got.MigProfile, "3g.40gb")
+	}
+	if got.ParentIndex != 1 {
+		t.Errorf("ParentIndex = %d, want 1", got.ParentIndex)
+	}
+	// Shared physical metrics must be copied into the MIG instance.
+	if got.TemperatureCelsius != 72 {
+		t.Errorf("TemperatureCelsius = %d, want 72 (shared from physical GPU)", got.TemperatureCelsius)
+	}
+	if got.PowerDrawWatts != 300 {
+		t.Errorf("PowerDrawWatts = %d, want 300 (shared from physical GPU)", got.PowerDrawWatts)
+	}
+}
+
+func TestMockCollector_CollectByUUID_NotFound(t *testing.T) {
+	c := NewMockCollector(migDevices)
+
+	_, err := c.CollectByUUID("GPU-does-not-exist")
+	if err == nil {
+		t.Error("CollectByUUID() expected error for unknown UUID, got nil")
+	}
+}
+
+func TestMockCollector_CollectByUUID_AllMIGInstances(t *testing.T) {
+	// Collect both MIG instances individually by UUID and verify they differ.
+	c := NewMockCollector(migDevices)
+
+	m0, err := c.CollectByUUID("MIG-GPU-bbbb-2222/3/0")
+	if err != nil {
+		t.Fatalf("CollectByUUID(inst0) error = %v", err)
+	}
+	m1, err := c.CollectByUUID("MIG-GPU-bbbb-2222/4/0")
+	if err != nil {
+		t.Fatalf("CollectByUUID(inst1) error = %v", err)
+	}
+
+	if m0.GPUUtilization == m1.GPUUtilization {
+		t.Errorf("both instances have the same GPUUtilization (%d); they should differ",
+			m0.GPUUtilization)
+	}
+	// Shared metric (temperature) must be identical across instances.
+	if m0.TemperatureCelsius != m1.TemperatureCelsius {
+		t.Errorf("TemperatureCelsius differs: inst0=%d inst1=%d; shared metric should be equal",
+			m0.TemperatureCelsius, m1.TemperatureCelsius)
+	}
+}
+
+func TestMIGMetricsFields(t *testing.T) {
+	m := Metrics{
+		Index:         0,
+		UUID:          "MIG-GPU-cccc/1/0",
+		Name:          "MIG 1g.10gb",
+		IsMIGInstance: true,
+		ParentIndex:   2,
+		MigProfile:    "1g.10gb",
+	}
+
+	if !m.IsMIGInstance {
+		t.Error("IsMIGInstance = false, want true")
+	}
+	if m.ParentIndex != 2 {
+		t.Errorf("ParentIndex = %d, want 2", m.ParentIndex)
+	}
+	if m.MigProfile != "1g.10gb" {
+		t.Errorf("MigProfile = %q, want %q", m.MigProfile, "1g.10gb")
+	}
+}
+
+func TestParseMIGProfile(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"MIG 1g.10gb", "1g.10gb"},
+		{"MIG 3g.40gb", "3g.40gb"},
+		{"MIG 7g.80gb", "7g.80gb"},
+		{"MIG 2g.20gb", "2g.20gb"},
+		// Non-MIG name — returned unchanged
+		{"NVIDIA A100-SXM4-80GB", "NVIDIA A100-SXM4-80GB"},
+		{"", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := parseMIGProfile(tt.input)
+			if got != tt.want {
+				t.Errorf("parseMIGProfile(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMockCollectorImplementsInterfaceWithMIG(t *testing.T) {
+	// compile-time check that MockCollector still satisfies MetricsCollector
+	// after CollectByUUID was added to the interface.
+	var _ MetricsCollector = (*MockCollector)(nil)
+}

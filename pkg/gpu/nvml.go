@@ -18,6 +18,7 @@ package gpu
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/NVIDIA/go-nvml/pkg/nvml"
@@ -27,7 +28,7 @@ import (
 // maxNVLinks is the maximum number of NVLink connections per GPU (H100 upper bound).
 const maxNVLinks = 18
 
-// Metrics holds a snapshot of GPU metrics for a single device.
+// Metrics holds a snapshot of GPU metrics for a single device or MIG instance.
 type Metrics struct {
 	Index              int
 	UUID               string
@@ -45,6 +46,11 @@ type Metrics struct {
 	// NVLink throughput
 	NVLinkTxMBps uint64
 	NVLinkRxMBps uint64
+
+	// MIG fields — zero-valued for non-MIG entries.
+	IsMIGInstance bool   // true for MIG compute instances
+	ParentIndex   int    // physical GPU index (-1 if resolved by UUID)
+	MigProfile    string // e.g. "3g.40gb"
 }
 
 // Collector wraps NVML to collect GPU metrics.
@@ -81,7 +87,8 @@ func (c *Collector) DeviceCount() (int, error) {
 	return count, nil
 }
 
-// CollectAll gathers metrics from all GPU devices on this node.
+// CollectAll gathers metrics from all GPUs. MIG-enabled GPUs return one
+// Metrics per compute instance instead of one per physical GPU.
 func (c *Collector) CollectAll() ([]Metrics, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -91,23 +98,81 @@ func (c *Collector) CollectAll() ([]Metrics, error) {
 		return nil, err
 	}
 
-	metrics := make([]Metrics, 0, count)
+	var metrics []Metrics
 	for i := 0; i < count; i++ {
-		m, err := c.collectDevice(i)
-		if err != nil {
-			c.logger.Warn("failed to collect metrics for device", zap.Int("index", i), zap.Error(err))
+		device, ret := nvml.DeviceGetHandleByIndex(i)
+		if ret != nvml.SUCCESS {
+			c.logger.Warn("failed to get device handle",
+				zap.Int("index", i),
+				zap.String("nvml_error", nvml.ErrorString(ret)))
 			continue
 		}
-		metrics = append(metrics, m)
+
+		if isMIGEnabled(device) {
+			// MIG path: one Metrics per compute instance.
+			instanceMetrics, err := c.collectMIGInstances(device, i)
+			if err != nil {
+				c.logger.Warn("failed to collect MIG instances",
+					zap.Int("gpu", i), zap.Error(err))
+				continue
+			}
+			metrics = append(metrics, instanceMetrics...)
+		} else {
+			// Standard path: one Metrics per physical GPU.
+			m, err := c.collectDevice(i)
+			if err != nil {
+				c.logger.Warn("failed to collect metrics for device",
+					zap.Int("index", i), zap.Error(err))
+				continue
+			}
+			metrics = append(metrics, m)
+		}
 	}
 	return metrics, nil
 }
 
-// CollectDevice gathers metrics from a specific GPU device by index.
+// CollectDevice gathers metrics from a specific GPU by index.
+// Returns physical-level metrics only on MIG-enabled GPUs (logs a warning).
 func (c *Collector) CollectDevice(index int) (Metrics, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	// Warn when MIG is active so callers know they are getting physical totals.
+	if h, ret := nvml.DeviceGetHandleByIndex(index); ret == nvml.SUCCESS && isMIGEnabled(h) {
+		c.logger.Warn("MIG is enabled on this GPU; CollectDevice returns physical-level metrics only — use CollectAll for per-instance MIG metrics",
+			zap.Int("index", index))
+	}
+
 	return c.collectDevice(index)
+}
+
+// CollectByUUID collects metrics for a device by UUID.
+// Works for both standard GPU UUIDs ("GPU-…") and MIG UUIDs ("MIG-GPU-…/3/0").
+func (c *Collector) CollectByUUID(uuid string) (Metrics, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	device, ret := nvml.DeviceGetHandleByUUID(uuid)
+	if ret != nvml.SUCCESS {
+		return Metrics{}, fmt.Errorf("device not found for UUID %q: %v", uuid, nvml.ErrorString(ret))
+	}
+
+	if strings.HasPrefix(uuid, "MIG-") {
+		// MIG instance: try to get the parent GPU for shared metrics.
+		physical := Metrics{}
+		if parent, pRet := nvml.DeviceGetDeviceHandleFromMigDeviceHandle(device); pRet == nvml.SUCCESS {
+			physical = c.collectPhysicalForMIG(parent, -1)
+		}
+		// instanceIdx is not determinable from a UUID lookup alone; use 0.
+		return c.collectMIGDevice(device, -1, 0, physical)
+	}
+
+	// Standard GPU: resolve index so we can use the existing collection path.
+	idx, ret := device.GetIndex()
+	if ret != nvml.SUCCESS {
+		return Metrics{}, fmt.Errorf("cannot determine index for UUID %q: %v", uuid, nvml.ErrorString(ret))
+	}
+	return c.collectDevice(idx)
 }
 
 func (c *Collector) collectDevice(index int) (Metrics, error) {
