@@ -1,0 +1,21 @@
+# Pre-commit hooks for keda-gpu-scaler.
+# Install with:  pip install pre-commit && pre-commit install
+# Run on all files:  pre-commit run --all-files
+#
+# See https://pre-commit.com for the framework documentation.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+
+  - repo: https://github.com/dnephin/pre-commit-golang
+    rev: v0.5.1
+    hooks:
+      - id: go-fmt
+      # golangci-lint is intentionally on the `manual` stage: it is accurate but
+      # can be slow on a cold cache, so it does not run on every commit. Run it
+      # explicitly with:  pre-commit run --hook-stage manual golangci-lint
+      - id: golangci-lint
+        stages: [manual]

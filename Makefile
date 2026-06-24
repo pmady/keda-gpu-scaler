@@ -42,6 +42,9 @@ check-fmt: ## Check formatting without modifying files (fails if any file needs 
 lint: ## Run linter
 	golangci-lint run ./...
 
+vet: ## Run vet
+	go vet ./...
+
 clean: ## Remove build artifacts
 	rm -rf bin/
 

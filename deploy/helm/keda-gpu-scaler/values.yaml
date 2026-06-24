@@ -1,47 +1,77 @@
-image:
-  repository: ghcr.io/pmady/keda-gpu-scaler
-  pullPolicy: IfNotPresent
-  tag: ""  # defaults to Chart appVersion
+# Default values for keda-gpu-scaler.
+# Each parameter is documented with a "# --" comment; the same descriptions are
+# rendered in the chart README's parameters table (deploy/helm/keda-gpu-scaler/README.md).
 
+# Container image for the scaler DaemonSet.
+image:
+  # -- Image repository.
+  repository: ghcr.io/pmady/keda-gpu-scaler
+  # -- Image pull policy (`Always`, `IfNotPresent`, or `Never`).
+  pullPolicy: IfNotPresent
+  # -- Image tag. Defaults to the chart `appVersion` when left empty.
+  tag: ""
+
+# -- Names of existing image pull secrets for pulling from a private registry.
 imagePullSecrets: []
+# -- Override the chart name used when generating resource names.
 nameOverride: ""
+# -- Override the fully qualified app name used for all resources.
 fullnameOverride: ""
 
 serviceAccount:
+  # -- Create a dedicated ServiceAccount for the scaler.
   create: true
+  # -- Annotations to add to the ServiceAccount (e.g. IRSA / Workload Identity).
   annotations: {}
+  # -- Name of the ServiceAccount to use. Generated from the fullname when empty.
   name: ""
 
+# -- Annotations to add to the scaler pods.
 podAnnotations: {}
 
 service:
+  # -- Service type for the gRPC (and metrics) endpoint.
   type: ClusterIP
+  # -- Service port, forwarded to the container's gRPC port.
   port: 6000
 
 grpc:
+  # -- Container port the gRPC external-scaler server listens on (passed as `--port`).
   port: 6000
 
+# -- Log verbosity: `debug`, `info`, `warn`, or `error` (passed as `--log-level`).
 logLevel: info
 
-# Prometheus metrics endpoint. Set enabled: false to disable.
+# Prometheus metrics endpoint.
 metrics:
+  # -- Enable the Prometheus metrics endpoint. When false, the scaler runs with
+  # `--metrics-port=0` and no metrics container port or Service entry is created.
   enabled: true
+  # -- Port for the Prometheus metrics HTTP server (passed as `--metrics-port`).
   port: 9090
 
 probes:
+  # -- Enable the health/readiness HTTP server and the pod liveness/readiness
+  # probes. When false, the scaler runs with `--probe-port=0` and no probes are set.
   enabled: true
+  # -- Port for the health/readiness HTTP server (passed as `--probe-port`).
   port: 8081
 
+# -- Node selector for scheduling scaler pods. Defaults to NVIDIA GPU nodes.
 nodeSelector:
   nvidia.com/gpu.present: "true"
 
+# -- Tolerations for scheduling scaler pods. Defaults to tolerating the standard
+# NVIDIA GPU taint so the DaemonSet lands on GPU nodes.
 tolerations:
   - key: nvidia.com/gpu
     operator: Exists
     effect: NoSchedule
 
+# -- Affinity rules for scheduling scaler pods.
 affinity: {}
 
+# -- CPU/memory resource requests and limits for the scaler container.
 resources:
   limits:
     cpu: 200m
@@ -50,26 +80,34 @@ resources:
     cpu: 100m
     memory: 64Mi
 
-# NVML needs privileged access to GPU devices
+# -- Container security context. NVML needs privileged access to the GPU device
+# files, hence `privileged: true` and `runAsUser: 0`.
 securityContext:
   privileged: true
   runAsUser: 0
 
-# NVIDIA container runtime handles device mounts automatically.
-# Set to "" if your cluster doesn't have the nvidia runtime class.
+# -- RuntimeClass for the pods. The NVIDIA container runtime mounts the GPU
+# devices automatically. Set to "" if your cluster has no `nvidia` runtime class
+# (and enable `nvmlHostMounts` instead).
 runtimeClassName: nvidia
 
-# For clusters WITHOUT the nvidia runtime class, enable hostPath
-# mounts so NVML can reach the GPU device files directly.
+# Host-path mounts for clusters WITHOUT the nvidia runtime class, so NVML can
+# reach the GPU device files directly.
 nvmlHostMounts:
+  # -- Enable hostPath mounts of the NVML device files and shared library.
   enabled: false
+  # -- Host path to the NVIDIA control device.
   nvidiactl: /dev/nvidiactl
+  # -- Host path to the NVIDIA Unified Memory device.
   nvidiaUvm: /dev/nvidia-uvm
+  # -- Host path to the NVML shared library (`libnvidia-ml.so.1`).
   nvmlLib: /usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1
 
+# -- DaemonSet update strategy.
 updateStrategy:
   type: RollingUpdate
   rollingUpdate:
     maxUnavailable: 1
 
+# -- Grace period (in seconds) for a pod to shut down before it is force-killed.
 terminationGracePeriodSeconds: 30
