@@ -259,6 +259,20 @@ make docker-release VERSION=v0.1.0
 make deploy
 ```
 
+### Checking the Version
+
+Both binaries accept a `--version` flag (and a bare `version` argument) that
+prints the version, Go version, and build date, then exits. Unlike normal
+operation, this does **not** require a GPU or the NVIDIA driver:
+
+```bash
+keda-gpu-scaler --version    # keda-gpu-scaler v0.5.0 (go1.26.4, built 2026-06-25)
+gpu-metrics --version        # gpu-metrics v0.5.0 (go1.26.4, built 2026-06-25)
+```
+
+`make build` stamps the version from `git describe` at link time; builds without
+ldflags (e.g. `go run`) report `dev`.
+
 ### Standalone GPU Metrics CLI
 
 Collect GPU metrics without Kubernetes — works on bare metal, SLURM jobs, Flux jobs, Kubernetes pods, and Singularity containers. The same binary and the same JSON schema work everywhere.
@@ -273,6 +287,7 @@ gpu-metrics --format csv          # CSV for analysis
 gpu-metrics --interval 5s         # continuous collection
 gpu-metrics --device 0 --quiet    # single GPU, no logs
 gpu-metrics --env slurm           # force environment (auto|k8s|slurm|flux|standalone)
+gpu-metrics --version             # print version and exit (no GPU/NVML required)
 ```
 
 The `--env` flag auto-detects the orchestrator by default. Detection priority: **SLURM → Flux → Kubernetes → standalone**.
