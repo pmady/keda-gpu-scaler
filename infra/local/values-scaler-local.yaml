@@ -1,0 +1,34 @@
+# Helm values for running keda-gpu-scaler on a LOCAL single-node minikube
+# cluster (e.g. on WSL2). This is NOT for the cloud — see infra/terraform/aws
+# for that. Used by ./setup.sh.
+
+image:
+  # Built locally into minikube's Docker by setup.sh, so never pulled.
+  repository: keda-gpu-scaler
+  tag: dev
+  pullPolicy: Never
+
+# Single-node cluster: the only node has the GPU, so we don't need the
+# nvidia.com/gpu.present label (which a full GPU operator install would add).
+# Empty selector = schedule anywhere.
+nodeSelector: {}
+
+# minikube's Docker GPU support does NOT register an `nvidia` RuntimeClass, so
+# disable it and instead host-mount the driver bits directly into the pod. This
+# is exactly what the chart's nvmlHostMounts option is for.
+runtimeClassName: ""
+
+nvmlHostMounts:
+  enabled: true
+  # These paths are inside the minikube node. If the scaler pod crashes with an
+  # "NVML init failed" / "cannot open libnvidia-ml.so" error, the library path
+  # below is almost certainly wrong for your node — see the README
+  # "Troubleshooting" section for how to find the right one.
+  nvidiactl: /dev/nvidiactl
+  nvidiaUvm: /dev/nvidia-uvm
+  nvmlLib: /usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1
+
+# NVML needs privileged access to the GPU device files.
+securityContext:
+  privileged: true
+  runAsUser: 0

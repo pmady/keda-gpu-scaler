@@ -11,8 +11,11 @@ infra/terraform/
   aws/        # Amazon EKS (implemented)   -> see aws/README.md
   # gcp/      # Google GKE  (planned)
   # azure/    # Azure AKS   (planned)
-  # kind/     # local kind + mock NVML (planned)
 ```
+
+For **local** (non-cloud) GPU testing on your own machine, see
+[`infra/local/`](../local) — a minikube-based single-node cluster that runs the
+same KEDA + keda-gpu-scaler stack against a real local NVIDIA GPU.
 
 Each cloud lives in its own self-contained, independently `apply`-able directory
 (its own providers, modules, variables, state). They deliberately do **not**
@@ -34,7 +37,7 @@ The shared contract every directory aims to honour:
 | AWS EKS | [`aws/`](./aws) | ✅ Implemented |
 | GCP GKE | `gcp/` | ⏳ Planned |
 | Azure AKS | `azure/` | ⏳ Planned |
-| Local kind + mock NVML | `kind/` | ⏳ Planned |
+| Local single-node GPU | [`../local/`](../local) | ✅ Implemented (minikube, real GPU) |
 
 ## Conventions
 
