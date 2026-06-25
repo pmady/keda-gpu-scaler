@@ -55,8 +55,9 @@ type Metrics struct {
 
 // Collector wraps NVML to collect GPU metrics.
 type Collector struct {
-	logger *zap.Logger
-	mu     sync.Mutex
+	logger        *zap.Logger
+	mu            sync.Mutex
+	driverVersion string
 }
 
 // NewCollector creates a new GPU metrics collector.
@@ -66,7 +67,26 @@ func NewCollector(logger *zap.Logger) (*Collector, error) {
 		return nil, fmt.Errorf("failed to initialize NVML: %v", nvml.ErrorString(ret))
 	}
 	logger.Info("NVML initialized successfully")
-	return &Collector{logger: logger}, nil
+
+	// The NVIDIA driver version is node-wide and fixed for the life of the
+	// process, so read it once here. A failure is non-fatal — metric collection
+	// still works without it.
+	driverVersion, ret := nvml.SystemGetDriverVersion()
+	if ret != nvml.SUCCESS {
+		logger.Warn("failed to read NVML driver version",
+			zap.String("nvml_error", nvml.ErrorString(ret)))
+		driverVersion = ""
+	} else {
+		logger.Info("NVIDIA driver detected", zap.String("driver_version", driverVersion))
+	}
+
+	return &Collector{logger: logger, driverVersion: driverVersion}, nil
+}
+
+// DriverVersion returns the NVIDIA driver version reported by NVML at startup,
+// or an empty string if it could not be read.
+func (c *Collector) DriverVersion() string {
+	return c.driverVersion
 }
 
 // Close shuts down the NVML library.

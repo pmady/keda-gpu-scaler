@@ -95,7 +95,7 @@ func main() {
 			fmt.Fprintf(os.Stderr, "collection failed: %v\n", err)
 			os.Exit(1)
 		}
-		output(metrics, *format, envCtx)
+		output(metrics, *format, envCtx, collector.DriverVersion())
 		return
 	}
 
@@ -111,7 +111,7 @@ func main() {
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "collection failed: %v\n", err)
 		} else {
-			output(metrics, *format, envCtx)
+			output(metrics, *format, envCtx, collector.DriverVersion())
 		}
 
 		select {
@@ -238,14 +238,14 @@ func collectDevices(c gpu.MetricsCollector, devs []int) ([]gpu.Metrics, error) {
 	return out, nil
 }
 
-func output(metrics []gpu.Metrics, format string, envCtx env.Context) {
+func output(metrics []gpu.Metrics, format string, envCtx env.Context, driverVersion string) {
 	switch format {
 	case "json":
-		outputJSON(metrics, envCtx)
+		outputJSON(metrics, envCtx, driverVersion)
 	case "csv":
 		outputCSV(metrics, envCtx)
 	default:
-		outputTable(metrics, envCtx)
+		outputTable(metrics, envCtx, driverVersion)
 	}
 }
 
@@ -253,18 +253,20 @@ func output(metrics []gpu.Metrics, format string, envCtx env.Context) {
 // The "environment" block lets consumers compare runs from different
 // orchestrators without any schema changes.
 type jsonOutput struct {
-	Environment env.Context   `json:"environment"`
-	CollectedAt time.Time     `json:"collected_at"`
-	Devices     []gpu.Metrics `json:"devices"`
+	Environment   env.Context   `json:"environment"`
+	DriverVersion string        `json:"driver_version,omitempty"`
+	CollectedAt   time.Time     `json:"collected_at"`
+	Devices       []gpu.Metrics `json:"devices"`
 }
 
-func outputJSON(metrics []gpu.Metrics, envCtx env.Context) {
+func outputJSON(metrics []gpu.Metrics, envCtx env.Context, driverVersion string) {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	_ = enc.Encode(jsonOutput{
-		Environment: envCtx,
-		CollectedAt: time.Now().UTC(),
-		Devices:     metrics,
+		Environment:   envCtx,
+		DriverVersion: driverVersion,
+		CollectedAt:   time.Now().UTC(),
+		Devices:       metrics,
 	})
 }
 
@@ -282,7 +284,7 @@ func outputCSV(metrics []gpu.Metrics, envCtx env.Context) {
 	w.Flush()
 }
 
-func outputTable(metrics []gpu.Metrics, envCtx env.Context) {
+func outputTable(metrics []gpu.Metrics, envCtx env.Context, driverVersion string) {
 	// Print environment banner.
 	fmt.Printf("Environment : %s", envCtx.Orchestrator)
 	if envCtx.NodeName != "" {
@@ -299,6 +301,9 @@ func outputTable(metrics []gpu.Metrics, envCtx env.Context) {
 	}
 	if envCtx.Partition != "" {
 		fmt.Printf("  |  Partition: %s", envCtx.Partition)
+	}
+	if driverVersion != "" {
+		fmt.Printf("  |  Driver: %s", driverVersion)
 	}
 	fmt.Println()
 	fmt.Println()

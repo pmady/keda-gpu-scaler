@@ -18,6 +18,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -117,5 +118,25 @@ func TestPrintDryRunRendersSchedulerContext(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("dry-run output missing %q\n--- output ---\n%s", want, out)
 		}
+	}
+}
+
+// The driver version (issue #68) must appear in the JSON output when present
+// and be omitted when empty (omitempty).
+func TestJSONOutputDriverVersion(t *testing.T) {
+	withDriver, err := json.Marshal(jsonOutput{DriverVersion: "535.104.05"})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(withDriver), `"driver_version":"535.104.05"`) {
+		t.Errorf("driver_version missing from JSON output: %s", withDriver)
+	}
+
+	noDriver, err := json.Marshal(jsonOutput{})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(string(noDriver), "driver_version") {
+		t.Errorf("empty driver_version should be omitted, got: %s", noDriver)
 	}
 }
