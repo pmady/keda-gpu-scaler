@@ -14,9 +14,12 @@ PROFILE="${MINIKUBE_PROFILE:-minikube}"
 log() { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 
 log "Removing demo resources"
-kubectl delete -f "$SCRIPT_DIR/demo/gpu-load.yaml" --ignore-not-found
-kubectl delete -f "$SCRIPT_DIR/demo/scaledobject.yaml" --ignore-not-found
-kubectl delete -f "$SCRIPT_DIR/demo/scale-target.yaml" --ignore-not-found
+# Tolerate failures: if setup never completed, the KEDA CRDs (and thus the
+# ScaledObject kind) may not exist, which makes `kubectl delete` error out
+# rather than no-op. Don't let that abort the rest of the teardown.
+kubectl delete -f "$SCRIPT_DIR/demo/gpu-load.yaml" --ignore-not-found 2>/dev/null || true
+kubectl delete -f "$SCRIPT_DIR/demo/scaledobject.yaml" --ignore-not-found 2>/dev/null || true
+kubectl delete -f "$SCRIPT_DIR/demo/scale-target.yaml" --ignore-not-found 2>/dev/null || true
 
 log "Uninstalling Helm releases"
 helm uninstall keda-gpu-scaler -n "$KEDA_NAMESPACE" --ignore-not-found || true
