@@ -22,9 +22,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
+	"google.golang.org/grpc"
 
 	pb "github.com/pmady/keda-gpu-scaler/pkg/externalscaler"
 	"github.com/pmady/keda-gpu-scaler/pkg/gpu"
@@ -891,5 +893,123 @@ func TestGetMetrics_VLLMQueueDepthProfile(t *testing.T) {
 	}
 	if resp.MetricValues[0].MetricValueFloat != 8 {
 		t.Errorf("queue depth = %v, want 8", resp.MetricValues[0].MetricValueFloat)
+	}
+}
+
+// mockStreamIsActive implements pb.ExternalScaler_StreamIsActiveServer for
+// testing StreamIsActive: Send pushes onto sent, Context returns ctx, and the
+// remaining ServerStream methods are inherited (unused by StreamIsActive).
+type mockStreamIsActive struct {
+	grpc.ServerStream
+	ctx  context.Context
+	sent chan *pb.IsActiveResponse
+}
+
+func (m *mockStreamIsActive) Context() context.Context { return m.ctx }
+
+func (m *mockStreamIsActive) Send(resp *pb.IsActiveResponse) error {
+	select {
+	case m.sent <- resp:
+	case <-m.ctx.Done():
+	}
+	return nil
+}
+
+func TestStreamIsActive_InvalidMetadata(t *testing.T) {
+	s := newTestScaler(testDevices)
+	stream := &mockStreamIsActive{ctx: context.Background(), sent: make(chan *pb.IsActiveResponse, 1)}
+	err := s.StreamIsActive(
+		&pb.ScaledObjectRef{ScalerMetadata: map[string]string{"profile": "nonexistent"}},
+		stream,
+	)
+	if err == nil {
+		t.Error("StreamIsActive() with invalid metadata should return an error")
+	}
+}
+
+func TestStreamIsActive_ContextCancelled(t *testing.T) {
+	s := newTestScaler(testDevices)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancelled before the call, so the stream loop exits at once
+	stream := &mockStreamIsActive{ctx: ctx, sent: make(chan *pb.IsActiveResponse, 1)}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- s.StreamIsActive(&pb.ScaledObjectRef{ScalerMetadata: map[string]string{}}, stream)
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("StreamIsActive() = %v, want nil on cancelled context", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("StreamIsActive() did not return after context cancellation")
+	}
+}
+
+func TestStreamIsActive_SendsOnTick(t *testing.T) {
+	s := newTestScaler(testDevices)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	stream := &mockStreamIsActive{ctx: ctx, sent: make(chan *pb.IsActiveResponse, 4)}
+
+	// max GPU util across testDevices is 80; threshold 50 => active. Tick every 1s.
+	md := map[string]string{"activationThreshold": "50", "pollIntervalSeconds": "1"}
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- s.StreamIsActive(&pb.ScaledObjectRef{ScalerMetadata: md}, stream)
+	}()
+
+	select {
+	case resp := <-stream.sent:
+		if !resp.Result {
+			t.Error("StreamIsActive() sent Result=false, want true (max util 80 > threshold 50)")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("StreamIsActive() did not send a result within 3s")
+	}
+
+	cancel()
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Errorf("StreamIsActive() = %v, want nil after cancel", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("StreamIsActive() did not return after cancel")
+	}
+}
+
+func TestGetMetricSpecInvalidMetadata(t *testing.T) {
+	s := newTestScaler(testDevices)
+	_, err := s.GetMetricSpec(context.Background(), &pb.ScaledObjectRef{
+		ScalerMetadata: map[string]string{"profile": "nonexistent"},
+	})
+	if err == nil {
+		t.Error("GetMetricSpec() with invalid metadata should return an error")
+	}
+}
+
+func TestGetMetricsInvalidMetadata(t *testing.T) {
+	s := newTestScaler(testDevices)
+	_, err := s.GetMetrics(context.Background(), &pb.GetMetricsRequest{
+		ScaledObjectRef: &pb.ScaledObjectRef{ScalerMetadata: map[string]string{"aggregation": "median"}},
+	})
+	if err == nil {
+		t.Error("GetMetrics() with invalid metadata should return an error")
+	}
+}
+
+// A nil metadata map must be handled like an empty one (all defaults), not panic.
+func TestIsActiveNilMetadata(t *testing.T) {
+	s := newTestScaler(testDevices)
+	resp, err := s.IsActive(context.Background(), &pb.ScaledObjectRef{ScalerMetadata: nil})
+	if err != nil {
+		t.Fatalf("IsActive() with nil metadata error = %v", err)
+	}
+	// defaults: activationThreshold 0, max util 80 > 0 => active.
+	if !resp.Result {
+		t.Error("IsActive() with nil metadata = false, want true (default threshold 0, util 80)")
 	}
 }
