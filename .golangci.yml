@@ -1,0 +1,37 @@
+version: "2"
+
+run:
+  timeout: 3m
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - unused
+    - ineffassign
+    - misspell
+  settings:
+    errcheck:
+      check-blank: false
+    govet:
+      enable:
+        - shadow
+        - printf
+        - structtag
+        - unreachable
+    staticcheck:
+      checks:
+        - "SA*"
+        - "S1*"
+    unused:
+      field-writes-are-uses: false
+      post-statements-are-reads: false
+      exported-fields-are-used: true
+      parameters-are-used: true
+      local-variables-are-used: true
+  exclusions:
+    generated: strict
+    paths:
+      - vendor
