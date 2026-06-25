@@ -18,13 +18,16 @@ package scaler
 
 import (
 	"context"
+	"errors"
 	"math"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
+	"google.golang.org/grpc"
 
 	pb "github.com/pmady/keda-gpu-scaler/pkg/externalscaler"
 	"github.com/pmady/keda-gpu-scaler/pkg/gpu"
@@ -891,5 +894,242 @@ func TestGetMetrics_VLLMQueueDepthProfile(t *testing.T) {
 	}
 	if resp.MetricValues[0].MetricValueFloat != 8 {
 		t.Errorf("queue depth = %v, want 8", resp.MetricValues[0].MetricValueFloat)
+	}
+}
+
+// mockStreamIsActive implements pb.ExternalScaler_StreamIsActiveServer for
+// testing StreamIsActive: Send pushes onto sent, Context returns ctx, and the
+// remaining ServerStream methods are inherited (unused by StreamIsActive).
+type mockStreamIsActive struct {
+	grpc.ServerStream
+	ctx  context.Context
+	sent chan *pb.IsActiveResponse
+}
+
+func (m *mockStreamIsActive) Context() context.Context { return m.ctx }
+
+func (m *mockStreamIsActive) Send(resp *pb.IsActiveResponse) error {
+	select {
+	case m.sent <- resp:
+	case <-m.ctx.Done():
+	}
+	return nil
+}
+
+func TestStreamIsActive_InvalidMetadata(t *testing.T) {
+	s := newTestScaler(testDevices)
+	stream := &mockStreamIsActive{ctx: context.Background(), sent: make(chan *pb.IsActiveResponse, 1)}
+	err := s.StreamIsActive(
+		&pb.ScaledObjectRef{ScalerMetadata: map[string]string{"profile": "nonexistent"}},
+		stream,
+	)
+	if err == nil {
+		t.Error("StreamIsActive() with invalid metadata should return an error")
+	}
+}
+
+func TestStreamIsActive_ContextCancelled(t *testing.T) {
+	s := newTestScaler(testDevices)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancelled before the call, so the stream loop exits at once
+	stream := &mockStreamIsActive{ctx: ctx, sent: make(chan *pb.IsActiveResponse, 1)}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- s.StreamIsActive(&pb.ScaledObjectRef{ScalerMetadata: map[string]string{}}, stream)
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("StreamIsActive() = %v, want nil on cancelled context", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("StreamIsActive() did not return after context cancellation")
+	}
+}
+
+func TestStreamIsActive_SendsOnTick(t *testing.T) {
+	s := newTestScaler(testDevices)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	stream := &mockStreamIsActive{ctx: ctx, sent: make(chan *pb.IsActiveResponse, 4)}
+
+	// max GPU util across testDevices is 80; threshold 50 => active. Tick every 1s.
+	md := map[string]string{"activationThreshold": "50", "pollIntervalSeconds": "1"}
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- s.StreamIsActive(&pb.ScaledObjectRef{ScalerMetadata: md}, stream)
+	}()
+
+	select {
+	case resp := <-stream.sent:
+		if !resp.Result {
+			t.Error("StreamIsActive() sent Result=false, want true (max util 80 > threshold 50)")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("StreamIsActive() did not send a result within 3s")
+	}
+
+	cancel()
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Errorf("StreamIsActive() = %v, want nil after cancel", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("StreamIsActive() did not return after cancel")
+	}
+}
+
+func TestGetMetricSpecInvalidMetadata(t *testing.T) {
+	s := newTestScaler(testDevices)
+	_, err := s.GetMetricSpec(context.Background(), &pb.ScaledObjectRef{
+		ScalerMetadata: map[string]string{"profile": "nonexistent"},
+	})
+	if err == nil {
+		t.Error("GetMetricSpec() with invalid metadata should return an error")
+	}
+}
+
+func TestGetMetricsInvalidMetadata(t *testing.T) {
+	s := newTestScaler(testDevices)
+	_, err := s.GetMetrics(context.Background(), &pb.GetMetricsRequest{
+		ScaledObjectRef: &pb.ScaledObjectRef{ScalerMetadata: map[string]string{"aggregation": "median"}},
+	})
+	if err == nil {
+		t.Error("GetMetrics() with invalid metadata should return an error")
+	}
+}
+
+// A nil metadata map must be handled like an empty one (all defaults), not panic.
+func TestIsActiveNilMetadata(t *testing.T) {
+	s := newTestScaler(testDevices)
+	resp, err := s.IsActive(context.Background(), &pb.ScaledObjectRef{ScalerMetadata: nil})
+	if err != nil {
+		t.Fatalf("IsActive() with nil metadata error = %v", err)
+	}
+	// defaults: activationThreshold 0, max util 80 > 0 => active.
+	if !resp.Result {
+		t.Error("IsActive() with nil metadata = false, want true (default threshold 0, util 80)")
+	}
+}
+
+// Each numeric shorthand must reject a non-numeric value.
+func TestParseMetadataInvalidShorthands(t *testing.T) {
+	for _, key := range []string{"targetValue", "targetGpuUtilization", "targetMemoryUtilization", "activationThreshold"} {
+		t.Run(key, func(t *testing.T) {
+			if _, err := parseMetadata(map[string]string{key: "not-a-number"}); err == nil {
+				t.Errorf("parseMetadata(%s=not-a-number) should return an error", key)
+			}
+		})
+	}
+}
+
+// An out-of-range gpuIndex makes the (mock) collector error, which IsActive and
+// GetMetrics must propagate rather than swallow.
+func TestCollectorErrorPropagates(t *testing.T) {
+	s := newTestScaler(testDevices)
+	md := map[string]string{"gpuIndex": "99"} // only indices 0,1 exist
+
+	if _, err := s.IsActive(context.Background(), &pb.ScaledObjectRef{ScalerMetadata: md}); err == nil {
+		t.Error("IsActive() with out-of-range gpuIndex should return an error")
+	}
+	if _, err := s.GetMetrics(context.Background(), &pb.GetMetricsRequest{
+		ScaledObjectRef: &pb.ScaledObjectRef{ScalerMetadata: md},
+	}); err == nil {
+		t.Error("GetMetrics() with out-of-range gpuIndex should return an error")
+	}
+}
+
+// errSendStream always fails Send, to exercise StreamIsActive's send-error path.
+type errSendStream struct {
+	grpc.ServerStream
+	ctx context.Context
+}
+
+func (m *errSendStream) Context() context.Context        { return m.ctx }
+func (m *errSendStream) Send(*pb.IsActiveResponse) error { return errors.New("send failed") }
+
+func TestStreamIsActive_SendError(t *testing.T) {
+	s := newTestScaler(testDevices)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- s.StreamIsActive(&pb.ScaledObjectRef{
+			ScalerMetadata: map[string]string{"pollIntervalSeconds": "1"},
+		}, &errSendStream{ctx: ctx})
+	}()
+
+	select {
+	case err := <-errCh:
+		if err == nil {
+			t.Error("StreamIsActive() should return the Send error")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("StreamIsActive() did not return after a Send error")
+	}
+}
+
+// When collection fails mid-stream, StreamIsActive must log and keep streaming
+// (no Send, no return) until the context is cancelled.
+func TestStreamIsActive_CollectorErrorContinues(t *testing.T) {
+	s := newTestScaler([]gpu.Metrics{}) // no devices => getMetricValue errors each tick
+	ctx, cancel := context.WithCancel(context.Background())
+	stream := &mockStreamIsActive{ctx: ctx, sent: make(chan *pb.IsActiveResponse, 1)}
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- s.StreamIsActive(&pb.ScaledObjectRef{
+			ScalerMetadata: map[string]string{"pollIntervalSeconds": "1"},
+		}, stream)
+	}()
+
+	select {
+	case <-stream.sent:
+		t.Error("StreamIsActive() sent a result despite a collection error")
+	case <-time.After(1500 * time.Millisecond):
+		// expected: errored, logged, continued — nothing sent
+	}
+
+	cancel()
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Errorf("StreamIsActive() = %v, want nil after cancel", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("StreamIsActive() did not return after cancel")
+	}
+}
+
+func TestGetVLLMClientCached(t *testing.T) {
+	s := NewGPUExternalScaler(gpu.NewMockCollector(testDevices), zap.NewNop())
+
+	c1 := s.getVLLMClient("http://vllm-a.invalid:8000")
+	if c2 := s.getVLLMClient("http://vllm-a.invalid:8000"); c1 != c2 {
+		t.Error("getVLLMClient() should return the cached client for the same endpoint")
+	}
+	if c3 := s.getVLLMClient("http://vllm-b.invalid:8000"); c1 == c3 {
+		t.Error("getVLLMClient() should return distinct clients for different endpoints")
+	}
+}
+
+// A vLLM endpoint that cannot be scraped must surface as an error.
+func TestGetMetricsVLLMScrapeError(t *testing.T) {
+	ts := fakeVLLMServer()
+	url := ts.URL
+	ts.Close() // close so the endpoint is unreachable
+
+	s := NewGPUExternalScaler(gpu.NewMockCollector(testDevices), zap.NewNop())
+	_, err := s.GetMetrics(context.Background(), &pb.GetMetricsRequest{
+		ScaledObjectRef: &pb.ScaledObjectRef{
+			ScalerMetadata: map[string]string{"profile": "vllm-queue-depth", "vllmEndpoint": url},
+		},
+	})
+	if err == nil {
+		t.Error("GetMetrics() with an unreachable vLLM endpoint should return an error")
 	}
 }

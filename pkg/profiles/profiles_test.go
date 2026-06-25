@@ -156,3 +156,16 @@ func TestProfileActivationValues(t *testing.T) {
 		t.Errorf("vllm-inference.ActivationValue = %v, want > 0", vllm.ActivationValue)
 	}
 }
+
+func TestIsVLLMMetric(t *testing.T) {
+	for _, mt := range []MetricType{MetricVLLMQueueDepth, MetricVLLMKVCacheUsage} {
+		if !IsVLLMMetric(mt) {
+			t.Errorf("IsVLLMMetric(%q) = false, want true", mt)
+		}
+	}
+	for _, mt := range []MetricType{MetricGPUUtilization, MetricMemoryUsedPercent, MetricTemperature, "", "unknown"} {
+		if IsVLLMMetric(mt) {
+			t.Errorf("IsVLLMMetric(%q) = true, want false", mt)
+		}
+	}
+}
