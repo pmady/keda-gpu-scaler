@@ -1,0 +1,9 @@
+# Keep shell scripts and YAML/HCL as LF even when checked out on Windows
+# (e.g. via Git for Windows with core.autocrlf=true). CRLF in a script's
+# shebang line breaks execution under Linux/WSL with "bad interpreter: bash\r".
+*.sh        text eol=lf
+*.bash      text eol=lf
+*.yaml      text eol=lf
+*.yml       text eol=lf
+*.tf        text eol=lf
+.terraform-version text eol=lf
