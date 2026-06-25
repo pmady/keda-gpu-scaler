@@ -297,6 +297,7 @@ Every environment emits the same unified JSON schema with an `environment` block
 ```json
 {
   "environment": { "orchestrator": "slurm", "node": "compute-01", "job_id": "123", "task_rank": 0 },
+  "driver_version": "535.104.05",
   "collected_at": "2026-06-17T10:00:00Z",
   "devices": [...]
 }
