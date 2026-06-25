@@ -144,11 +144,34 @@ minikube ssh -- 'find / -name "libnvidia-ml.so*" 2>/dev/null'
 The NVIDIA Container Toolkit isn't installed/configured (prerequisite 3), or
 Docker wasn't restarted afterwards. Fix that before running `setup.sh`.
 
-**Node never advertises `nvidia.com/gpu`.**
-Check the device plugin: `kubectl -n kube-system get pods | grep nvidia` and
-`kubectl describe node | grep -A5 Allocatable`. Make sure minikube started with
-`--gpus=all` (re-run `minikube delete` then `./setup.sh` if you started it
-without GPU support earlier).
+**Node never advertises `nvidia.com/gpu` / device-plugin logs show
+"Failed to initialize NVML: Not Supported".**
+The GPU isn't inside the minikube node. minikube's docker driver only passes the
+GPU in if Docker's **default runtime is `nvidia`** — a one-off `docker run
+--gpus all` is not enough.
+
+> [!IMPORTANT]
+> **Docker Desktop cannot do this.** Its daemon runs in a managed VM where you
+> can't set the default runtime, so `minikube --gpus all` will start but the
+> node won't have a GPU (you'll see `NVML: Not Supported` in the device-plugin
+> log). `docker run --gpus all` working does **not** mean minikube will.
+>
+> The reliable local fix is to use **native Docker Engine inside WSL2** (not
+> Docker Desktop's daemon) and set the nvidia runtime as default:
+> ```bash
+> # disable Docker Desktop's WSL integration for this distro first, then:
+> sudo apt install -y docker.io nvidia-container-toolkit
+> sudo nvidia-ctk runtime configure --runtime=docker --set-as-default
+> sudo systemctl restart docker            # WSL2 needs systemd enabled
+> docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi
+> minikube delete && ./setup.sh
+> ```
+>
+> If you'd rather not switch Docker engines, use the cloud path
+> ([`infra/terraform/aws`](../terraform/aws)) instead — EKS has no such issue.
+
+Also confirm minikube was started with `--gpus=all` (`minikube delete` then
+`./setup.sh` if you started it without GPU support earlier).
 
 **`demo-app` doesn't scale up.**
 Confirm the GPU is actually loaded (`kubectl -n keda logs ds/keda-gpu-scaler -f`
