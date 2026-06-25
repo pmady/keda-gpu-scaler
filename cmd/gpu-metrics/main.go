@@ -243,7 +243,7 @@ func output(metrics []gpu.Metrics, format string, envCtx env.Context, driverVers
 	case "json":
 		outputJSON(metrics, envCtx, driverVersion)
 	case "csv":
-		outputCSV(metrics, envCtx)
+		outputCSV(metrics, envCtx, driverVersion)
 	default:
 		outputTable(metrics, envCtx, driverVersion)
 	}
@@ -270,15 +270,17 @@ func outputJSON(metrics []gpu.Metrics, envCtx env.Context, driverVersion string)
 	})
 }
 
-func outputCSV(metrics []gpu.Metrics, envCtx env.Context) {
+func outputCSV(metrics []gpu.Metrics, envCtx env.Context, driverVersion string) {
 	w := csv.NewWriter(os.Stdout)
 
-	// Environment columns prefix GPU columns.
-	hdr := append(envCtx.Header(), csvHeader()...)
+	// Environment + driver columns prefix the per-GPU columns.
+	hdr := append(envCtx.Header(), "driver_version")
+	hdr = append(hdr, csvHeader()...)
 	_ = w.Write(hdr)
 
 	for _, m := range metrics {
-		row := append(envCtx.Row(), csvRow(m)...)
+		row := append(envCtx.Row(), driverVersion)
+		row = append(row, csvRow(m)...)
 		_ = w.Write(row)
 	}
 	w.Flush()

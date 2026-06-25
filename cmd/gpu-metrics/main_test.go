@@ -19,11 +19,14 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"io"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/pmady/keda-gpu-scaler/pkg/env"
+	"github.com/pmady/keda-gpu-scaler/pkg/gpu"
 )
 
 func TestDescribeDeviceFilter(t *testing.T) {
@@ -138,5 +141,60 @@ func TestJSONOutputDriverVersion(t *testing.T) {
 	}
 	if strings.Contains(string(noDriver), "driver_version") {
 		t.Errorf("empty driver_version should be omitted, got: %s", noDriver)
+	}
+}
+
+// captureStdout redirects os.Stdout while fn runs and returns what it wrote.
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	os.Stdout = w
+	defer func() { os.Stdout = old }()
+
+	fn()
+	_ = w.Close()
+
+	var buf bytes.Buffer
+	if _, err := io.Copy(&buf, r); err != nil {
+		t.Fatalf("copy: %v", err)
+	}
+	return buf.String()
+}
+
+// The driver version must appear in the table banner when present and be
+// omitted when empty (issue #68).
+func TestOutputTableDriverVersion(t *testing.T) {
+	devices := []gpu.Metrics{{Index: 0, Name: "A100"}}
+
+	withDriver := captureStdout(t, func() {
+		outputTable(devices, env.Context{Orchestrator: "standalone"}, "535.104.05")
+	})
+	if !strings.Contains(withDriver, "Driver: 535.104.05") {
+		t.Errorf("table banner missing driver version\n--- output ---\n%s", withDriver)
+	}
+
+	noDriver := captureStdout(t, func() {
+		outputTable(devices, env.Context{Orchestrator: "standalone"}, "")
+	})
+	if strings.Contains(noDriver, "Driver:") {
+		t.Errorf("empty driver version should not appear in banner\n--- output ---\n%s", noDriver)
+	}
+}
+
+// The driver version must be a CSV column (header + value) for parity with the
+// JSON and table outputs.
+func TestOutputCSVDriverVersion(t *testing.T) {
+	out := captureStdout(t, func() {
+		outputCSV([]gpu.Metrics{{Index: 0, Name: "A100"}}, env.Context{Orchestrator: "standalone"}, "535.104.05")
+	})
+	if !strings.Contains(out, "driver_version") {
+		t.Errorf("CSV header missing driver_version column\n--- output ---\n%s", out)
+	}
+	if !strings.Contains(out, "535.104.05") {
+		t.Errorf("CSV row missing driver version value\n--- output ---\n%s", out)
 	}
 }
