@@ -170,6 +170,22 @@ GPU in if Docker's **default runtime is `nvidia`** — a one-off `docker run
 > If you'd rather not switch Docker engines, use the cloud path
 > ([`infra/terraform/aws`](../terraform/aws)) instead — EKS has no such issue.
 
+> [!WARNING]
+> **WSL2 caveat (the deeper wall).** Even with `Default Runtime: nvidia` set,
+> the device plugin may *still* log `Failed to initialize NVML: Not Supported`.
+> On WSL2 the GPU is exposed via Microsoft's `/dev/dxg` + `/usr/lib/wsl/lib`,
+> not the native `/dev/nvidia*` path. Inside a **nested** container (pod ->
+> minikube node -> Docker Desktop -> WSL2) the NVIDIA container stack can't
+> follow the WSL path, so NVML init fails in pods even though
+> `minikube ssh -- nvidia-smi` works at the node level. This affects the scaler
+> pod too. Practical options on WSL2:
+>   1. **Use the cloud path** ([`infra/terraform/aws`](../terraform/aws)) — no
+>      WSL virtualization in the way. Most reliable.
+>   2. **Run a non-nested cluster directly in WSL2** (e.g. k3s on the WSL host,
+>      not inside Docker) with CDI device injection
+>      (`nvidia-ctk cdi generate`). Advanced and finicky, but avoids the nesting
+>      problem. Not scripted here.
+
 Also confirm minikube was started with `--gpus=all` (`minikube delete` then
 `./setup.sh` if you started it without GPU support earlier).
 
