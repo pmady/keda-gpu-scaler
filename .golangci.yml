@@ -10,6 +10,9 @@ linters:
     - govet
     - staticcheck
     - unused
+    # disabled — keeping simple per issue #72
+    # - ineffassign
+    # - misspell
   settings:
     errcheck:
       check-blank: false
