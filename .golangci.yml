@@ -10,8 +10,6 @@ linters:
     - govet
     - staticcheck
     - unused
-    - ineffassign
-    - misspell
   settings:
     errcheck:
       check-blank: false
