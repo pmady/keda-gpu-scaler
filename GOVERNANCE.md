@@ -4,7 +4,7 @@ How keda-gpu-scaler is run.
 
 ## Overview
 
-Right now this is a single-maintainer project. The governance here is intentionally simple — it'll grow as the contributor base does.
+Right now this is a single-maintainer project. The governance here is intentionally simple. It'll grow as the contributor base does.
 
 ## Roles
 

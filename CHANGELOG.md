@@ -8,18 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- **MIG (Multi-Instance GPU) per-instance metrics** — `CollectAll()` auto-detects MIG-enabled GPUs and enumerates each compute instance via NVML, returning one `Metrics` entry per instance instead of one per physical GPU. Shared chip-level metrics (temperature, power, PCIe, NVLink) are read from the parent GPU and copied into every instance. In HPC environments (SLURM, Flux), MIG UUIDs in `CUDA_VISIBLE_DEVICES` are detected and resolved individually via `CollectByUUID()`. New `Metrics` fields: `IsMIGInstance`, `ParentIndex`, `MigProfile`. New CSV columns: `is_mig_instance`, `parent_index`, `mig_profile`. Table output shows `gpu<N>/inst<M>` labels for MIG rows.
+- **MIG (Multi-Instance GPU) per-instance metrics**. `CollectAll()` auto-detects MIG-enabled GPUs and enumerates each compute instance via NVML, returning one `Metrics` entry per instance instead of one per physical GPU. Shared chip-level metrics (temperature, power, PCIe, NVLink) are read from the parent GPU and copied into every instance. In HPC environments (SLURM, Flux), MIG UUIDs in `CUDA_VISIBLE_DEVICES` are detected and resolved individually via `CollectByUUID()`. New `Metrics` fields: `IsMIGInstance`, `ParentIndex`, `MigProfile`. New CSV columns: `is_mig_instance`, `parent_index`, `mig_profile`. Table output shows `gpu<N>/inst<M>` labels for MIG rows.
 
 ## [v0.5.0] - 2026-06-23
 
 ### Added
 
-- **Cross-environment GPU metrics parity** (`--env` flag) — single binary and unified JSON schema across Kubernetes, SLURM, Flux, and standalone. The `pkg/env` package auto-detects the orchestrator (priority: SLURM → Flux → Kubernetes → standalone) and populates a common `environment` block in all output formats (JSON, CSV, table). Replaces the separate `--slurm` and `--flux` flags.
+- **Cross-environment GPU metrics parity** (`--env` flag): Single binary and unified JSON schema across Kubernetes, SLURM, Flux, and standalone. The `pkg/env` package auto-detects the orchestrator (priority: SLURM → Flux → Kubernetes → standalone) and populates a common `environment` block in all output formats (JSON, CSV, table). Replaces the separate `--slurm` and `--flux` flags.
 - Unified JSON output schema with top-level `environment` and `collected_at` fields for cross-environment GPU comparison.
 - `pkg/env` package: `Detect()`, `Parse()`, `FromType()`, `Context` with `VisibleDevices()`, `Header()`, `Row()`.
 - Kubernetes environment detection via `KUBERNETES_SERVICE_HOST`; pod/node/namespace metadata via Downward API env vars.
 - Runtime environment metadata logged at startup (orchestrator, node, pod, namespace).
-- `docs/cross-env-comparison.md` — guide for comparing GPU performance across on-prem and cloud.
+- `docs/cross-env-comparison.md`: Guide for comparing GPU performance across on-prem and cloud.
 - CI: arm64 builds, release checksums, semver tag guard rail.
 
 ### Changed

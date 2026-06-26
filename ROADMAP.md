@@ -4,7 +4,7 @@ Technical direction for keda-gpu-scaler. Updated as priorities shift.
 
 ## v0.5.0 (Released June 2026)
 
-- ✅ Cross-environment GPU metrics parity — unified `--env` flag and JSON schema across Kubernetes, SLURM, Flux, and standalone ([#54](https://github.com/pmady/keda-gpu-scaler/issues/54))
+- ✅ Cross-environment GPU metrics parity unified `--env` flag and JSON schema across Kubernetes, SLURM, Flux, and standalone ([#54](https://github.com/pmady/keda-gpu-scaler/issues/54))
 - ✅ Flux workload manager integration ([#53](https://github.com/pmady/keda-gpu-scaler/issues/53))
 - ✅ SLURM workload manager integration ([#52](https://github.com/pmady/keda-gpu-scaler/issues/52))
 - ✅ CI hardening: arm64 builds, release checksums, semver tag guard
@@ -30,14 +30,14 @@ Technical direction for keda-gpu-scaler. Updated as priorities shift.
 
 ## Future
 
-- **AMD ROCm** — Same DaemonSet pattern with rocm-smi bindings
-- **Intel Gaudi** — Habana Management Library integration
-- **Multi-cluster** — Federated scaling decisions across GPU clusters
-- **Cost-aware scaling** — Factor in spot/preemptible pricing
+- **AMD ROCm**: Same DaemonSet pattern with rocm-smi bindings
+- **Intel Gaudi**: Habana Management Library integration
+- **Multi-cluster**: Federated scaling decisions across GPU clusters
+- **Cost-aware scaling**: Factor in spot/preemptible pricing
 
 ## Non-Goals
 
-- Replacing DCGM exporter for observability (use both — this project is for scaling, not dashboards)
+- Replacing DCGM exporter for observability (use both this project is for scaling, not dashboards)
 - GPU sharing/virtualization (use HAMi, MIG, or time-slicing instead)
 - Node-level autoscaling (use Karpenter or Cluster Autoscaler)
 

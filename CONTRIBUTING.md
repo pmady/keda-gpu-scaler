@@ -60,7 +60,7 @@ pre-commit run --hook-stage manual golangci-lint
 ```
 
 > [!NOTE]
-> The compiled binaries (`keda-gpu-scaler` and `gpu-metrics`) dynamically link NVIDIA's NVML library (`libnvidia-ml.so`) at runtime. **They will fail to start on any machine that does not have the NVIDIA driver installed** — for example, a laptop or CI runner with no NVIDIA GPU. You can still build, lint, and run the full test suite without a GPU; all tests use a mock collector.
+> The compiled binaries (`keda-gpu-scaler` and `gpu-metrics`) dynamically link NVIDIA's NVML library (`libnvidia-ml.so`) at runtime. **They will fail to start on any machine that does not have the NVIDIA driver installed** for example, a laptop or CI runner with no NVIDIA GPU. You can still build, lint, and run the full test suite without a GPU; all tests use a mock collector.
 
 ### Testing on a GPU Cluster
 
