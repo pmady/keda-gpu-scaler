@@ -1,30 +1,16 @@
-# Copy to terraform.tfvars and edit as needed. All values are optional; the
-# defaults stand up a small, single-GPU-node EKS cluster ready for integration
-# testing.
+region             = "us-east-2"
+cluster_name       = "keda-gpu-scaler-test"
+kubernetes_version = "1.35"
+gpu_instance_type  = "g5.xlarge"
+gpu_node_count     = 1
+helm_timeout       = 600
 
-# region       = "us-west-2"
-# cluster_name = "keda-gpu-scaler-test"
+gpu_operator_chart_version = "v26.3.2"
+keda_chart_version         = "2.20.1"
 
-# Kubernetes control plane version (latest on EKS is 1.36).
-# kubernetes_version = "1.36"
+scaler_image_repository = "ghcr.io/pmady/keda-gpu-scaler"
+scaler_image_tag        = "v0.5.0"
 
-# GPU node pool. g5.xlarge (A10G) is the default. Cheaper: g4dn.xlarge (T4).
-# Newer: g6.xlarge (L4). You must hold the matching on-demand vCPU quota.
-# gpu_instance_type = "g5.xlarge"
-# gpu_node_count    = 1
-
-# Tag the cluster so it's easy to find / clean up later.
-# tags = {
-#   Owner   = "you@example.com"
-#   Expires = "2026-12-31"
-# }
-
-# Pin/override add-on versions if needed.
-# gpu_operator_chart_version = "v26.3.2"
-# keda_chart_version         = "2.20.1"
-
-# Scaler image. The tag defaults to a real published release (v0.5.0) because
-# the chart's own appVersion has no matching image on ghcr. Override to "latest"
-# or a specific tag/SHA, or point at your own build.
-# scaler_image_repository = "ghcr.io/pmady/keda-gpu-scaler"
-# scaler_image_tag        = "latest"
+tags = {
+  Project = "keda-gpu-scaler"
+}
