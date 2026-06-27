@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1220 880" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 z" fill="#455a64"/>
+    </marker>
+    <marker id="arrowg" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 z" fill="#2e7d32"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1220" height="880" fill="#ffffff"/>
+  <text x="610" y="34" text-anchor="middle" font-size="24" font-weight="bold" fill="#1a237e">keda-gpu-scaler — AWS EKS test cluster (infra/terraform/aws)</text>
+  <text x="610" y="58" text-anchor="middle" font-size="13" fill="#607d8b">One `terraform apply` builds everything below. Fixed 1 GPU node — no node autoscaler (predictable + cheap).</text>
+
+  <!-- Operator -->
+  <rect x="30" y="120" width="190" height="180" rx="8" fill="#eceff1" stroke="#607d8b" stroke-width="2"/>
+  <text x="125" y="146" text-anchor="middle" font-size="14" font-weight="bold" fill="#37474f">Operator (your machine)</text>
+  <text x="46" y="176" font-size="12.5" fill="#37474f">• terraform apply</text>
+  <text x="46" y="200" font-size="12.5" fill="#37474f">• aws CLI (creds + token)</text>
+  <text x="46" y="224" font-size="12.5" fill="#37474f">• kubectl</text>
+  <text x="46" y="258" font-size="11" fill="#78909c">Provisions the cluster &amp;</text>
+  <text x="46" y="274" font-size="11" fill="#78909c">drives it remotely over</text>
+  <text x="46" y="290" font-size="11" fill="#78909c">HTTPS (IAM token auth).</text>
+
+  <!-- arrow operator -> AWS -->
+  <line x1="222" y1="200" x2="288" y2="200" stroke="#455a64" stroke-width="2.5" marker-end="url(#arrow)"/>
+
+  <!-- AWS Cloud -->
+  <rect x="290" y="90" width="900" height="760" rx="10" fill="#fff8f0" stroke="#ec7211" stroke-width="2.5"/>
+  <text x="308" y="112" font-size="15" font-weight="bold" fill="#d35400">AWS Cloud — Region: us-east-2</text>
+
+  <!-- internet egress hint -->
+  <text x="312" y="150" font-size="11" fill="#8d6e63">↑ to Internet (pull images + KEDA / GPU-operator Helm charts) via IGW</text>
+
+  <!-- EKS control plane -->
+  <rect x="690" y="120" width="480" height="70" rx="8" fill="#fce4d6" stroke="#ec7211" stroke-width="2"/>
+  <text x="930" y="148" text-anchor="middle" font-size="14" font-weight="bold" fill="#bf360c">Amazon EKS — Managed Control Plane</text>
+  <text x="930" y="170" text-anchor="middle" font-size="12" fill="#bf360c">Kubernetes API server (public endpoint)</text>
+  <!-- operator -> EKS API -->
+  <line x1="222" y1="170" x2="688" y2="150" stroke="#455a64" stroke-width="1.6" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+  <text x="470" y="138" text-anchor="middle" font-size="10.5" fill="#607d8b">kubectl / aws eks get-token (HTTPS)</text>
+
+  <!-- VPC -->
+  <rect x="310" y="210" width="860" height="510" rx="9" fill="#f0f7ff" stroke="#1976d2" stroke-width="2"/>
+  <text x="328" y="232" font-size="14" font-weight="bold" fill="#0d47a1">VPC  10.0.0.0/16   ·   3 Availability Zones   ·   6 subnets</text>
+
+  <!-- IGW + NAT -->
+  <rect x="328" y="246" width="150" height="38" rx="6" fill="#fffde7" stroke="#fbc02d" stroke-width="2"/>
+  <text x="403" y="270" text-anchor="middle" font-size="12" font-weight="bold" fill="#f57f17">Internet Gateway</text>
+
+  <!-- Public subnets row -->
+  <text x="328" y="312" font-size="12.5" font-weight="bold" fill="#2e7d32">Public subnets (one per AZ)</text>
+  <rect x="328" y="322" width="260" height="92" rx="7" fill="#e8f5e9" stroke="#43a047" stroke-width="1.8"/>
+  <text x="344" y="342" font-size="11.5" fill="#1b5e20">Public · AZ-a · 10.0.48.0/24</text>
+  <rect x="356" y="352" width="170" height="46" rx="6" fill="#fffde7" stroke="#fbc02d" stroke-width="1.8"/>
+  <text x="441" y="372" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#f57f17">NAT Gateway</text>
+  <text x="441" y="388" text-anchor="middle" font-size="10" fill="#9e7d0a">(single, shared)</text>
+
+  <rect x="608" y="322" width="260" height="92" rx="7" fill="#e8f5e9" stroke="#43a047" stroke-width="1.8"/>
+  <text x="624" y="342" font-size="11.5" fill="#1b5e20">Public · AZ-b · 10.0.49.0/24</text>
+  <rect x="888" y="322" width="260" height="92" rx="7" fill="#e8f5e9" stroke="#43a047" stroke-width="1.8"/>
+  <text x="904" y="342" font-size="11.5" fill="#1b5e20">Public · AZ-c · 10.0.50.0/24</text>
+
+  <!-- Private subnets row -->
+  <text x="328" y="440" font-size="12.5" font-weight="bold" fill="#1565c0">Private subnets (one per AZ) — nodes live here</text>
+  <rect x="328" y="450" width="260" height="250" rx="7" fill="#e3f2fd" stroke="#1e88e5" stroke-width="1.8"/>
+  <text x="344" y="470" font-size="11.5" fill="#0d47a1">Private · AZ-a · 10.0.0.0/20</text>
+
+  <!-- GPU node -->
+  <rect x="344" y="480" width="228" height="208" rx="7" fill="#fff3e0" stroke="#fb8c00" stroke-width="2"/>
+  <text x="458" y="500" text-anchor="middle" font-size="12" font-weight="bold" fill="#e65100">GPU node ×1</text>
+  <text x="458" y="517" text-anchor="middle" font-size="10.5" fill="#bf6000">g4dn / g5.xlarge · 1× NVIDIA GPU</text>
+  <text x="458" y="532" text-anchor="middle" font-size="10.5" fill="#bf6000">AL2023 NVIDIA AMI (driver built-in)</text>
+
+  <!-- software on node -->
+  <rect x="356" y="544" width="204" height="34" rx="5" fill="#ede7f6" stroke="#7e57c2" stroke-width="1.6"/>
+  <text x="458" y="565" text-anchor="middle" font-size="11" fill="#4527a0">NVIDIA GPU Operator</text>
+  <rect x="356" y="584" width="204" height="34" rx="5" fill="#ede7f6" stroke="#7e57c2" stroke-width="1.6"/>
+  <text x="458" y="605" text-anchor="middle" font-size="11" fill="#4527a0">KEDA</text>
+  <rect x="356" y="624" width="204" height="50" rx="5" fill="#e1f5fe" stroke="#0288d1" stroke-width="2"/>
+  <text x="458" y="643" text-anchor="middle" font-size="11" font-weight="bold" fill="#01579b">keda-gpu-scaler (DaemonSet)</text>
+  <text x="458" y="659" text-anchor="middle" font-size="9.5" fill="#0277bd">reads NVML · serves gRPC :6000</text>
+
+  <rect x="608" y="450" width="260" height="250" rx="7" fill="#e3f2fd" stroke="#1e88e5" stroke-width="1.8"/>
+  <text x="624" y="470" font-size="11.5" fill="#0d47a1">Private · AZ-b · 10.0.16.0/20</text>
+  <text x="738" y="575" text-anchor="middle" font-size="11" fill="#90a4ae">(empty — fixed pool = 1 node;</text>
+  <text x="738" y="592" text-anchor="middle" font-size="11" fill="#90a4ae">spare AZ capacity, no autoscaler)</text>
+
+  <rect x="888" y="450" width="260" height="250" rx="7" fill="#e3f2fd" stroke="#1e88e5" stroke-width="1.8"/>
+  <text x="904" y="470" font-size="11.5" fill="#0d47a1">Private · AZ-c · 10.0.32.0/20</text>
+  <text x="1018" y="583" text-anchor="middle" font-size="11" fill="#90a4ae">(empty)</text>
+
+  <!-- egress arrows: node -> NAT -> IGW -->
+  <line x1="458" y1="480" x2="441" y2="400" stroke="#2e7d32" stroke-width="1.8" stroke-dasharray="5,4" marker-end="url(#arrowg)"/>
+  <line x1="430" y1="352" x2="408" y2="286" stroke="#2e7d32" stroke-width="1.8" stroke-dasharray="5,4" marker-end="url(#arrowg)"/>
+  <text x="500" y="430" font-size="10" fill="#2e7d32">egress (image/chart pulls)</text>
+
+  <!-- EKS control plane manages node -->
+  <line x1="690" y1="175" x2="574" y2="520" stroke="#ec7211" stroke-width="1.6" stroke-dasharray="2,3" marker-end="url(#arrow)"/>
+  <text x="650" y="350" font-size="10" fill="#d35400" transform="rotate(58 650 350)">manages / schedules</text>
+
+  <!-- Bottom: what terraform installs -->
+  <rect x="310" y="736" width="860" height="98" rx="9" fill="#f3e5f5" stroke="#8e24aa" stroke-width="2"/>
+  <text x="328" y="758" font-size="13" font-weight="bold" fill="#6a1b9a">Installed onto the GPU node by Terraform (via Helm):</text>
+  <text x="328" y="780" font-size="11.5" fill="#4a148c">• NVIDIA GPU Operator → driver/device-plugin, labels node nvidia.com/gpu.present=true, creates `nvidia` RuntimeClass</text>
+  <text x="328" y="800" font-size="11.5" fill="#4a148c">• KEDA → the autoscaler engine   ·   keda-gpu-scaler → reads the real GPU via NVML, serves metrics to KEDA over gRPC</text>
+  <text x="328" y="820" font-size="11.5" fill="#4a148c">• Demo (manual test): demo-app Deployment + ScaledObject + gpu-burn Job → watch pods scale on GPU load</text>
+
+  <!-- legend note -->
+  <text x="1162" y="715" text-anchor="end" font-size="10" fill="#9e9e9e">dashed = network/control flow</text>
+</svg>

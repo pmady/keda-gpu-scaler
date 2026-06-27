@@ -18,6 +18,11 @@ This is a test cluster, not production infrastructure. It uses well-maintained
 community modules (`terraform-aws-modules/vpc`, `terraform-aws-modules/eks`)
 rather than hand-rolled networking/EKS resources.
 
+## Architecture
+
+![Architecture of the AWS EKS test cluster](./architecture.svg)
+
+
 > [!WARNING]
 > ## GPU service quota — read this first, or your apply will fail
 >
