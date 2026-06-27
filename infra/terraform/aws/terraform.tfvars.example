@@ -5,8 +5,8 @@
 # region       = "us-west-2"
 # cluster_name = "keda-gpu-scaler-test"
 
-# Kubernetes control plane version.
-# kubernetes_version = "1.33"
+# Kubernetes control plane version (latest on EKS is 1.36).
+# kubernetes_version = "1.36"
 
 # GPU node pool. g5.xlarge (A10G) is the default. Cheaper: g4dn.xlarge (T4).
 # Newer: g6.xlarge (L4). You must hold the matching on-demand vCPU quota.

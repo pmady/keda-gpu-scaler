@@ -15,9 +15,9 @@ variable "cluster_name" {
 }
 
 variable "kubernetes_version" {
-  description = "EKS Kubernetes control plane version (<major>.<minor>)."
+  description = "EKS Kubernetes control plane version (<major>.<minor>). Latest on EKS is 1.36; pick a version still in standard support."
   type        = string
-  default     = "1.33"
+  default     = "1.35"
 }
 
 variable "vpc_cidr" {

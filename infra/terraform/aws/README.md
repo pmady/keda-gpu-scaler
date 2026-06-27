@@ -90,7 +90,7 @@ KEDA `ScaledObject` external trigger should target.
 | `region` | `us-west-2` | Choose one with GPU capacity + your quota. |
 | `gpu_instance_type` | `g5.xlarge` (A10G) | Cheaper: `g4dn.xlarge` (T4). Newer: `g6.xlarge` (L4). |
 | `gpu_node_count` | `1` | Fixed-size pool (min = max = desired). |
-| `kubernetes_version` | `1.33` | EKS control plane version. |
+| `kubernetes_version` | `1.35` | EKS control plane version (latest is 1.36; keep to a version in standard support). |
 | `gpu_operator_chart_version` | `v26.3.2` | NVIDIA GPU operator chart. |
 | `keda_chart_version` | `2.20.1` | KEDA chart. |
 
