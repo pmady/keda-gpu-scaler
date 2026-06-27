@@ -112,9 +112,16 @@ variable "scaler_image_repository" {
 }
 
 variable "scaler_image_tag" {
-  description = "Override the scaler container image tag. Empty string uses the chart default (the chart appVersion)."
+  description = <<-EOT
+    Scaler container image tag to deploy. Defaults to a published release tag,
+    because the chart's appVersion (0.1.0) has NO matching image on
+    ghcr.io/pmady/keda-gpu-scaler (the registry publishes `latest`, version tags
+    like `v0.5.0`, and commit SHAs). Use "latest" for the newest build, or a
+    specific tag/SHA. To run your OWN build, push it somewhere the cluster can
+    pull and set scaler_image_repository + this tag.
+  EOT
   type        = string
-  default     = ""
+  default     = "v0.5.0"
 }
 
 variable "scaler_runtime_class_name" {

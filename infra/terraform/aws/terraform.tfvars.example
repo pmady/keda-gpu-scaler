@@ -23,6 +23,8 @@
 # gpu_operator_chart_version = "v26.3.2"
 # keda_chart_version         = "2.20.1"
 
-# Override the scaler image (defaults to the chart's ghcr.io/pmady image+tag).
+# Scaler image. The tag defaults to a real published release (v0.5.0) because
+# the chart's own appVersion has no matching image on ghcr. Override to "latest"
+# or a specific tag/SHA, or point at your own build.
 # scaler_image_repository = "ghcr.io/pmady/keda-gpu-scaler"
-# scaler_image_tag        = "0.1.0"
+# scaler_image_tag        = "latest"
