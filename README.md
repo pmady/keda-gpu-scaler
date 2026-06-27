@@ -360,6 +360,7 @@ docker push your-registry/keda-gpu-scaler:v0.1.0
 - **[Migration Guide](docs/MIGRATION.md)** — Replace dcgm-exporter + Prometheus with keda-gpu-scaler
 - **[HPC & Cross-Environment Metrics](docs/hpc.md)** — SLURM, Flux, Kubernetes, and standalone GPU metrics
 - **[Cross-Environment Comparison](docs/cross-env-comparison.md)** — Compare GPU performance across on-prem and cloud
+- **[Troubleshooting](TROUBLESHOOTING.md)** — Common deployment, NVML, gRPC, metric, and MIG issues
 - **[FAQ](docs/FAQ.md)** — Common questions about GPU scaling, MIG, multi-GPU, scale-to-zero
 - **[Changelog](CHANGELOG.md)** — Release history
 
