@@ -75,6 +75,18 @@ module "eks" {
   # the same apply.
   enable_cluster_creator_admin_permissions = true
 
+  # Core EKS-managed add-ons. Without these the cluster has NO pod networking,
+  # so nodes never reach Ready and the node group fails with
+  # "NodeCreationFailure: Unhealthy nodes". vpc-cni (and the pod identity agent)
+  # must be installed BEFORE the node group joins — hence before_compute = true;
+  # coredns/kube-proxy can settle once nodes exist.
+  addons = {
+    vpc-cni                = { before_compute = true }
+    eks-pod-identity-agent = { before_compute = true }
+    kube-proxy             = {}
+    coredns                = {}
+  }
+
   vpc_id     = module.vpc.vpc_id
   subnet_ids = module.vpc.private_subnets
 
