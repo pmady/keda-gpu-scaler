@@ -30,9 +30,13 @@ This design is documented in [KEDA issue #7538](https://github.com/kedacore/keda
 
 ## Architecture
 
+### High Level Overview
+
 <p align="center">
   <img src="docs/images/architecture.png" alt="keda-gpu-scaler architecture overview" width="100%"/>
 </p>
+
+### Detailed Data Flow
 
 <p align="center">
   <img src="docs/images/architecture.svg" alt="keda-gpu-scaler data flow" width="100%"/>

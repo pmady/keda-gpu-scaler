@@ -8,6 +8,7 @@ vendor/
 promotion/
 dev-server/
 Dockerfile.dev
+.idea
 terraform/
 # but track the committed Infrastructure-as-Code (see infra/terraform/.gitignore
 # for the Terraform artifacts that are still ignored within it)
