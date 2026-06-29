@@ -30,9 +30,32 @@ This design is documented in [KEDA issue #7538](https://github.com/kedacore/keda
 
 ## Architecture
 
-<p align="center">
-  <img src="docs/images/architecture.png" alt="keda-gpu-scaler architecture" width="100%"/>
-</p>
+<!-- Diagram source: docs/images/architecture.mmd -->
+```mermaid
+flowchart TD
+    subgraph GPU_Node["GPU Node (nvidia.com/gpu.present: true)"]
+        HW["GPU Hardware<br/>(/dev/nvidia0..N)"]
+        NVML["libnvidia-ml.so<br/>(NVML C-bindings via cgo)"]
+        POLLER["NVML Polling Loop<br/>(~2s interval, in-memory cache)"]
+        GRPC["keda-gpu-scaler DaemonSet<br/>gRPC Server :6000"]
+        PROM["Prometheus /metrics :9090<br/>(optional, independent of scaling)"]
+
+        HW -->|"NVML read"| NVML
+        NVML -->|"SM util, VRAM, temp, power"| POLLER
+        POLLER -->|"cached metrics"| GRPC
+        POLLER -.->|"gauges (optional)"| PROM
+    end
+
+    SVC["ClusterIP Service<br/>keda-gpu-scaler.keda.svc.cluster.local:6000"]
+    KEDA["KEDA Operator<br/>(ScaledObject external trigger)"]
+    HPA["HPA<br/>(managed by KEDA)"]
+    DEPLOY["Target Deployment<br/>(vLLM / Triton / custom)"]
+
+    GRPC -->|"gRPC :6000"| SVC
+    SVC -->|"GetMetrics / IsActive / GetMetricSpec"| KEDA
+    KEDA -->|"scale decision"| HPA
+    HPA -->|"replica count"| DEPLOY
+```
 
 1. **DaemonSet** — Runs on nodes labeled with `nvidia.com/gpu.present: "true"`.
 2. **NVML Bindings** — Directly reads Streaming Multiprocessor (SM) utilization and Frame Buffer Memory via `go-nvml` C-bindings.
