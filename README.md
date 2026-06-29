@@ -392,24 +392,21 @@ Using keda-gpu-scaler? Add your organization to [ADOPTERS.md](ADOPTERS.md).
 
 Thanks to everyone who helps build keda-gpu-scaler.
 
-<!-- readme: contributors -start -->
-<table>
-<tr>
-    <td align="center"><a href="https://github.com/pmady"><img src="https://avatars.githubusercontent.com/u/15876315?v=4" width="80;" alt="pmady"/><br /><sub><b>Pavan Madduri</b></sub></a></td>
-    <td align="center"><a href="https://github.com/venkata22a"><img src="https://avatars.githubusercontent.com/u/31258325?v=4" width="80;" alt="venkata22a"/><br /><sub><b>venkata22a</b></sub></a></td>
-    <td align="center"><a href="https://github.com/pen-pal"><img src="https://avatars.githubusercontent.com/u/61139563?v=4" width="80;" alt="pen-pal"/><br /><sub><b>Manish Khadka</b></sub></a></td>
-    <td align="center"><a href="https://github.com/ibobgunardi"><img src="https://avatars.githubusercontent.com/u/24878946?v=4" width="80;" alt="ibobgunardi"/><br /><sub><b>Bobi Gunardi</b></sub></a></td>
-    <td align="center"><a href="https://github.com/KaustAbhinand"><img src="https://avatars.githubusercontent.com/u/154255646?v=4" width="80;" alt="KaustAbhinand"/><br /><sub><b>Kaustubh Abhinand</b></sub></a></td>
-    <td align="center"><a href="https://github.com/Atharv-AC"><img src="https://avatars.githubusercontent.com/u/235652593?v=4" width="80;" alt="Atharv-AC"/><br /><sub><b>Atharv</b></sub></a></td>
-</tr>
-</table>
-<!-- readme: contributors -end -->
-
 See [CONTRIBUTORS.md](CONTRIBUTORS.md) for detailed contributions.
 
 ## Contributing
 
 Contributions welcome — GPU autoscaling use cases, vendor support (AMD ROCm, Intel), or docs improvements. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Star History
+
+<a href="https://www.star-history.com/?repos=pmady%2Fkeda-gpu-scaler&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=pmady/keda-gpu-scaler&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=pmady/keda-gpu-scaler&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=pmady/keda-gpu-scaler&type=date&legend=top-left" />
+ </picture>
+</a>
 
 ## License
 
