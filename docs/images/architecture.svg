@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="545" viewBox="0 0 920 545">
+  <defs>
+    <marker id="arrowhead" markerWidth="8" markerHeight="7" refX="7" refY="3.5" orient="auto">
+      <path d="M0,0 L8,3.5 L0,7 z" fill="#444444"/>
+    </marker>
+    <marker id="arrowhead-dashed" markerWidth="8" markerHeight="7" refX="7" refY="3.5" orient="auto">
+      <path d="M0,0 L8,3.5 L0,7 z" fill="#888888"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="920" height="545" fill="#ffffff"/>
+
+  <!-- Title -->
+  <text x="460" y="38" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="18" font-weight="bold" fill="#1a1a1a">keda-gpu-scaler Architecture</text>
+
+  <!-- GPU Node bounding box -->
+  <rect x="20" y="60" width="545" height="425" rx="12" fill="#f0f7e6" stroke="#76b900" stroke-width="2"/>
+
+  <!-- GPU Node label -->
+  <text x="275" y="82" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="13" font-weight="bold" fill="#3a6600">GPU Node</text>
+  <text x="275" y="96" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="10" fill="#3a6600">nvidia.com/gpu.present: true</text>
+
+  <!-- === INSIDE GPU NODE === -->
+
+  <!-- GPU Hardware box -->
+  <rect x="50" y="105" width="250" height="65" rx="8" fill="#e8f5d0" stroke="#5a8a00" stroke-width="1.5"/>
+  <text x="175" y="127" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="13" font-weight="bold" fill="#1a1a1a">GPU Hardware</text>
+  <text x="175" y="146" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#555555">/dev/nvidia0..N</text>
+
+  <!-- libnvidia-ml.so box -->
+  <rect x="50" y="200" width="250" height="65" rx="8" fill="#e8f5d0" stroke="#5a8a00" stroke-width="1.5"/>
+  <text x="175" y="222" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="13" font-weight="bold" fill="#1a1a1a">libnvidia-ml.so</text>
+  <text x="175" y="241" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#555555">NVML C-bindings via cgo</text>
+
+  <!-- NVML Polling Loop box -->
+  <rect x="50" y="295" width="250" height="65" rx="8" fill="#e8f5d0" stroke="#5a8a00" stroke-width="1.5"/>
+  <text x="175" y="317" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="13" font-weight="bold" fill="#1a1a1a">NVML Polling Loop</text>
+  <text x="175" y="336" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#555555">~2s interval · in-memory cache</text>
+
+  <!-- DaemonSet box -->
+  <rect x="50" y="390" width="250" height="65" rx="8" fill="#e8f5d0" stroke="#5a8a00" stroke-width="1.5"/>
+  <text x="175" y="412" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="13" font-weight="bold" fill="#1a1a1a">keda-gpu-scaler DaemonSet</text>
+  <text x="175" y="431" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#555555">gRPC server :6000</text>
+
+  <!-- Prometheus box (dashed) -->
+  <rect x="365" y="295" width="170" height="65" rx="8" fill="#f5f5f5" stroke="#aaaaaa" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <text x="450" y="317" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="13" font-weight="bold" fill="#1a1a1a">Prometheus /metrics</text>
+  <text x="450" y="333" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#555555">:9090</text>
+  <text x="450" y="349" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#555555">optional · independent</text>
+
+  <!-- === OUTSIDE GPU NODE === -->
+
+  <!-- ClusterIP Service -->
+  <rect x="580" y="105" width="305" height="65" rx="8" fill="#e3f2fd" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="732" y="127" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="13" font-weight="bold" fill="#1a1a1a">ClusterIP Service</text>
+  <text x="732" y="146" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#555555">keda-gpu-scaler.keda.svc.cluster.local:6000</text>
+
+  <!-- KEDA Operator -->
+  <rect x="580" y="220" width="305" height="65" rx="8" fill="#fff3e0" stroke="#e65100" stroke-width="1.5"/>
+  <text x="732" y="242" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="13" font-weight="bold" fill="#1a1a1a">KEDA Operator</text>
+  <text x="732" y="261" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#555555">ScaledObject external trigger</text>
+
+  <!-- HPA -->
+  <rect x="580" y="335" width="305" height="65" rx="8" fill="#f3e5f5" stroke="#6a1b9a" stroke-width="1.5"/>
+  <text x="732" y="357" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="13" font-weight="bold" fill="#1a1a1a">HPA</text>
+  <text x="732" y="376" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#555555">managed by KEDA</text>
+
+  <!-- Target Deployment -->
+  <rect x="580" y="450" width="305" height="65" rx="8" fill="#e8f5e9" stroke="#2e7d32" stroke-width="1.5"/>
+  <text x="732" y="472" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="13" font-weight="bold" fill="#1a1a1a">Target Deployment</text>
+  <text x="732" y="491" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#555555">vLLM · Triton · custom</text>
+
+  <!-- === ARROWS === -->
+
+  <!-- 1. GPU Hardware → libnvidia-ml.so (vertical down) -->
+  <path d="M 175,170 L 175,200" stroke="#444444" stroke-width="1.5" fill="none" marker-end="url(#arrowhead)"/>
+  <text x="190" y="188" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="10" fill="#444444">NVML read</text>
+
+  <!-- 2. libnvidia-ml.so → NVML Polling Loop (vertical down) -->
+  <path d="M 175,265 L 175,295" stroke="#444444" stroke-width="1.5" fill="none" marker-end="url(#arrowhead)"/>
+  <text x="175" y="283" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="10" fill="#444444">SM util · VRAM · temp · power</text>
+
+  <!-- 3. NVML Polling Loop → DaemonSet (vertical down) -->
+  <path d="M 175,360 L 175,390" stroke="#444444" stroke-width="1.5" fill="none" marker-end="url(#arrowhead)"/>
+  <text x="190" y="378" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="10" fill="#444444">cached metrics</text>
+
+  <!-- 4. NVML Polling Loop → Prometheus (horizontal right, dashed) -->
+  <path d="M 300,327 L 365,327" stroke="#888888" stroke-width="1.5" stroke-dasharray="6,3" fill="none" marker-end="url(#arrowhead-dashed)"/>
+  <text x="332" y="320" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="10" fill="#666666">gauges</text>
+
+  <!-- 5. DaemonSet → ClusterIP Service (right, up, right with bends) -->
+  <path d="M 300,422 H 572 V 137 H 580" stroke="#444444" stroke-width="1.5" fill="none" marker-end="url(#arrowhead)"/>
+  <text x="430" y="415" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="10" fill="#444444">gRPC :6000</text>
+
+  <!-- 6. ClusterIP Service → KEDA Operator (vertical down) -->
+  <path d="M 732,170 L 732,220" stroke="#444444" stroke-width="1.5" fill="none" marker-end="url(#arrowhead)"/>
+  <text x="732" y="198" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="10" fill="#444444">GetMetrics · IsActive · GetMetricSpec</text>
+
+  <!-- 7. KEDA Operator → HPA (vertical down) -->
+  <path d="M 732,285 L 732,335" stroke="#444444" stroke-width="1.5" fill="none" marker-end="url(#arrowhead)"/>
+  <text x="745" y="313" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="10" fill="#444444">scale decision</text>
+
+  <!-- 8. HPA → Target Deployment (vertical down) -->
+  <path d="M 732,400 L 732,450" stroke="#444444" stroke-width="1.5" fill="none" marker-end="url(#arrowhead)"/>
+  <text x="732" y="428" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="10" fill="#444444">replica count (incl. scale-to-zero)</text>
+
+</svg>
