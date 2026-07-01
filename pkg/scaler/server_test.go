@@ -243,6 +243,12 @@ func TestParseMetadata(t *testing.T) {
 			want: scalerConfig{
 				metricName:          "keda_gpu_metric",
 				metricType:          profiles.MetricGPUUtilization,
+				targetValue:         1000000,
+				activationThreshold: 0,
+				gpuIndex:            -1,
+				aggregation:         "max",
+				pollIntervalSeconds: 10,
+			},
 		},
 		{
 			name: "pollIntervalSeconds zero accepted",
