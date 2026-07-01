@@ -236,6 +236,15 @@ func TestParseMetadata(t *testing.T) {
 			},
 		},
 		{
+			name: "very large targetValue accepted",
+			metadata: map[string]string{
+				"targetValue": "1000000",
+			},
+			want: scalerConfig{
+				metricName:          "keda_gpu_metric",
+				metricType:          profiles.MetricGPUUtilization,
+		},
+		{
 			name: "pollIntervalSeconds zero accepted",
 			metadata: map[string]string{
 				"pollIntervalSeconds": "0",
@@ -257,7 +266,7 @@ func TestParseMetadata(t *testing.T) {
 				"metricType": "temperature",
 			},
 			want: scalerConfig{
-				metricName:          "keda_gpu_vllm_inference",  // this is same as profile name
+				metricName:          "keda_gpu_vllm_inference",  // from profile
 				metricType:          profiles.MetricTemperature, // overridden
 				targetValue:         80,                         // from profile
 				activationThreshold: 5,                          // from profile
