@@ -1,5 +1,5 @@
-github.com/NVIDIA/go-nvml v0.13.2-0 h1:7M4cFG62wSUHw8i0XSiNU7ejKODytTS6ZrW/vgB2NSI=
-github.com/NVIDIA/go-nvml v0.13.2-0/go.mod h1:ahi2psRYoa+wYUBIrZPRO+wJs9lcvMhxSSkjjvsJJNQ=
+github.com/NVIDIA/go-nvml v0.13.3-0 h1:oJZ4+VTtPI/XT7XCfo5NvE9XTNrH8I3/KHy89rHxDxY=
+github.com/NVIDIA/go-nvml v0.13.3-0/go.mod h1:ahi2psRYoa+wYUBIrZPRO+wJs9lcvMhxSSkjjvsJJNQ=
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=
 github.com/beorn7/perks v1.0.1/go.mod h1:G2ZrVWU2WbWT9wwq4/hrbKbnv/1ERSJQ0ibhJ6rlkpw=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
