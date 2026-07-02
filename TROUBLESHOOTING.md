@@ -17,7 +17,12 @@ Check that KEDA can see your `ScaledObject`:
 ```bash
 kubectl get scaledobject -A
 kubectl describe scaledobject <name> -n <namespace>
+kubectl describe hpa <hpa-name> -n <namespace>
 ```
+
+KEDA creates and manages the HPA for the scaled workload. Describing the HPA can
+show whether KEDA is publishing metrics and what replica decisions Kubernetes is
+making.
 
 Check the scaler Service and ports:
 
@@ -164,7 +169,14 @@ expected nodes.
    kubectl get pods -n keda -l app.kubernetes.io/name=keda-gpu-scaler
    ```
 
-4. If you changed `grpc.port` in Helm or `--port` in the manifest, update both
+4. If you can reach the pod or Service network directly, use `grpcurl` to verify
+   the external scaler is responding on the gRPC port:
+
+   ```bash
+   grpcurl -plaintext <scaler-ip-or-service>:6000 list
+   ```
+
+5. If you changed `grpc.port` in Helm or `--port` in the manifest, update both
    the Service port and every `ScaledObject` `scalerAddress`.
 
 ## Permission denied on `/dev/nvidia*`

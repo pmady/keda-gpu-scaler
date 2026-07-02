@@ -199,6 +199,88 @@ func TestParseMetadata(t *testing.T) {
 				pollIntervalSeconds: 10,
 			},
 		},
+		{
+			name: "empty string targetValue",
+			metadata: map[string]string{
+				"targetValue": "",
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty string gpuIndex",
+			metadata: map[string]string{
+				"gpuIndex": "",
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty string pollIntervalSeconds",
+			metadata: map[string]string{
+				"pollIntervalSeconds": "",
+			},
+			wantErr: true,
+		},
+		{
+			name: "negative gpuIndex accepted (no range check in parseMetadata)",
+			metadata: map[string]string{
+				"gpuIndex": "-2",
+			},
+			want: scalerConfig{
+				metricName:          "keda_gpu_metric",
+				metricType:          profiles.MetricGPUUtilization,
+				targetValue:         80,
+				activationThreshold: 0,
+				gpuIndex:            -2,
+				aggregation:         "max",
+				pollIntervalSeconds: 10,
+			},
+		},
+		{
+			name: "very large targetValue accepted",
+			metadata: map[string]string{
+				"targetValue": "1000000",
+			},
+			want: scalerConfig{
+				metricName:          "keda_gpu_metric",
+				metricType:          profiles.MetricGPUUtilization,
+				targetValue:         1000000,
+				activationThreshold: 0,
+				gpuIndex:            -1,
+				aggregation:         "max",
+				pollIntervalSeconds: 10,
+			},
+		},
+		{
+			name: "pollIntervalSeconds zero accepted",
+			metadata: map[string]string{
+				"pollIntervalSeconds": "0",
+			},
+			want: scalerConfig{
+				metricName:          "keda_gpu_metric",
+				metricType:          profiles.MetricGPUUtilization,
+				targetValue:         80,
+				activationThreshold: 0,
+				gpuIndex:            -1,
+				aggregation:         "max",
+				pollIntervalSeconds: 0,
+			},
+		},
+		{
+			name: "profile with metricType override",
+			metadata: map[string]string{
+				"profile":    "vllm-inference",
+				"metricType": "temperature",
+			},
+			want: scalerConfig{
+				metricName:          "keda_gpu_vllm_inference",  // from profile
+				metricType:          profiles.MetricTemperature, // overridden
+				targetValue:         80,                         // from profile
+				activationThreshold: 5,                          // from profile
+				gpuIndex:            -1,
+				aggregation:         "max",
+				pollIntervalSeconds: 10,
+			},
+		},
 	}
 
 	for _, tt := range tests {
