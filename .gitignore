@@ -13,3 +13,4 @@ terraform/
 # for the Terraform artifacts that are still ignored within it)
 !infra/terraform/
 dev/
+.idea
