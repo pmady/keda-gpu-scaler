@@ -42,10 +42,9 @@ The rules that apply to any change here:
 infra/
   terraform/
     aws/        # Amazon EKS (implemented)
+    azure/      # Azure AKS  (implemented)
     # gcp/      # Google GKE (planned)
-    # azure/    # Azure AKS  (planned)
-    README.md   # index + AWS details
-  local/        # minikube single-node path for a local GPU
+    README.md   # index + per-cloud details
 ```
 
 Each cloud is a **self-contained, independently `apply`-able** Terraform stack
@@ -109,7 +108,8 @@ State which approach a stack uses and why.
 `keda-gpu-scaler` scales workload **pods** based on GPU load. Scaling GPU
 **nodes** is intentionally out of scope (use Karpenter / Cluster Autoscaler or
 the cloud equivalent). Test clusters therefore use a fixed GPU node count and no
-node autoscaler; the demo in `infra/local/demo/` shows pod scale up/down only.
+node autoscaler; the demos in `infra/terraform/<cloud>/demo/` show pod scale
+up/down only.
 
 ## GPU service quota (all clouds)
 
@@ -134,8 +134,8 @@ Apply on real hardware and confirm:
 - the scaler pod is `1/1 Running`; its logs show NVML initialized and the GPU
   being read over gRPC;
 - the `ScaledObject` is `READY` / `ACTIVE`;
-- under GPU load (`infra/local/demo/gpu-load.yaml`) the demo Deployment scales
-  up and then back down when idle.
+- under GPU load (`infra/terraform/<cloud>/demo/gpu-load.yaml`) the demo
+  Deployment scales up and then back down when idle.
 
 ## Adding a new cloud
 

@@ -1,0 +1,25 @@
+# All variables have sensible defaults, so this file is optional — `terraform
+# apply` works unmodified once ARM_SUBSCRIPTION_ID is set (or uncomment
+# subscription_id below) and you hold the GPU vCPU quota in `location`.
+# Copy to terraform.tfvars and override what you need.
+
+# subscription_id = "00000000-0000-0000-0000-000000000000"
+
+location            = "eastus"
+cluster_name        = "keda-gpu-scaler-test"
+resource_group_name = "keda-gpu-scaler-test-rg"
+kubernetes_version  = "1.33"
+gpu_vm_size    = "Standard_NC4as_T4_v3"
+gpu_node_count = 1
+helm_timeout   = 900
+
+gpu_operator_chart_version = "v26.3.2"
+keda_chart_version         = "2.20.1"
+
+scaler_image_repository = "ghcr.io/pmady/keda-gpu-scaler"
+scaler_image_tag        = "v0.5.0"
+
+tags = {
+  Project = "keda-gpu-scaler"
+}
+
