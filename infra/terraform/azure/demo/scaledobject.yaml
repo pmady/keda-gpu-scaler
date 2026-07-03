@@ -1,0 +1,27 @@
+# Tells KEDA: scale the `demo-app` Deployment based on GPU utilization reported
+# by keda-gpu-scaler. When the GPU gets busy (run demo/gpu-load.yaml), the
+# replica count climbs toward maxReplicaCount; when it goes idle, it falls back
+# to minReplicaCount.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: demo-app-gpu-scaler
+  namespace: default
+spec:
+  scaleTargetRef:
+    name: demo-app
+  minReplicaCount: 1
+  maxReplicaCount: 5
+  pollingInterval: 15 # how often KEDA asks the scaler (seconds)
+  cooldownPeriod: 30 # wait before scaling back down (seconds)
+  triggers:
+    - type: external
+      metadata:
+        # In-cluster address of the scaler's gRPC service (release name +
+        # namespace). Matches `helm install keda-gpu-scaler -n keda`.
+        scalerAddress: "keda-gpu-scaler.keda.svc.cluster.local:6000"
+        # Scale toward keeping GPU utilization around this %, aggregated across
+        # all GPUs (max). Low on purpose so the demo reacts quickly.
+        targetGpuUtilization: "30"
+        activationThreshold: "5"
+        aggregation: "max"

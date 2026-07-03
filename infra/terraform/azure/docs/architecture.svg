@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1220 810" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 z" fill="#455a64"/>
+    </marker>
+    <marker id="arrowa" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 z" fill="#0078d4"/>
+    </marker>
+    <marker id="arrowg" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 z" fill="#2e7d32"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1220" height="810" fill="#ffffff"/>
+  <text x="610" y="34" text-anchor="middle" font-size="24" font-weight="bold" fill="#1a237e">keda-gpu-scaler — Azure AKS test cluster (infra/terraform/azure)</text>
+  <text x="610" y="58" text-anchor="middle" font-size="13" fill="#607d8b">One `terraform apply` builds everything below. Fixed 1 GPU node — no autoscaler (predictable + cheap).</text>
+
+  <!-- Operator -->
+  <rect x="30" y="120" width="190" height="195" rx="8" fill="#eceff1" stroke="#607d8b" stroke-width="2"/>
+  <text x="125" y="146" text-anchor="middle" font-size="14" font-weight="bold" fill="#37474f">Operator (your machine)</text>
+  <text x="46" y="176" font-size="12.5" fill="#37474f">• terraform apply</text>
+  <text x="46" y="200" font-size="12.5" fill="#37474f">• az CLI (az login)</text>
+  <text x="46" y="224" font-size="12.5" fill="#37474f">• kubectl</text>
+  <text x="46" y="256" font-size="11" fill="#78909c">Provisions the cluster and</text>
+  <text x="46" y="272" font-size="11" fill="#78909c">drives it over HTTPS; reads the</text>
+  <text x="46" y="288" font-size="11" fill="#78909c">admin kubeconfig from state.</text>
+
+  <!-- arrow operator -> Azure -->
+  <line x1="222" y1="205" x2="288" y2="205" stroke="#455a64" stroke-width="2.5" marker-end="url(#arrow)"/>
+
+  <!-- Azure Cloud -->
+  <rect x="290" y="90" width="900" height="690" rx="10" fill="#eef6fc" stroke="#0078d4" stroke-width="2.5"/>
+  <text x="308" y="112" font-size="15" font-weight="bold" fill="#005a9e">Azure Cloud — Region: eastus</text>
+  <text x="312" y="146" font-size="11" fill="#607d8b">↑ to Internet (image + KEDA / GPU-operator Helm chart pulls) via AKS-managed outbound (Standard LB)</text>
+
+  <!-- AKS control plane -->
+  <rect x="690" y="120" width="480" height="70" rx="8" fill="#d6ebfb" stroke="#0078d4" stroke-width="2"/>
+  <text x="930" y="148" text-anchor="middle" font-size="14" font-weight="bold" fill="#005a9e">Azure AKS — Managed Control Plane</text>
+  <text x="930" y="170" text-anchor="middle" font-size="12" fill="#005a9e">Kubernetes API server (public endpoint)</text>
+  <!-- operator -> AKS API -->
+  <line x1="222" y1="168" x2="688" y2="150" stroke="#455a64" stroke-width="1.6" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+  <text x="470" y="138" text-anchor="middle" font-size="10.5" fill="#607d8b">kubectl / admin kubeconfig (HTTPS)</text>
+
+  <!-- User resource group -->
+  <rect x="310" y="208" width="860" height="78" rx="9" fill="#f3f8fd" stroke="#5b9bd5" stroke-width="2"/>
+  <text x="328" y="230" font-size="14" font-weight="bold" fill="#2e5b8a">Resource group: keda-gpu-scaler-test-rg</text>
+  <text x="328" y="252" font-size="11.5" fill="#37474f">azurerm_resource_group + azurerm_kubernetes_cluster (SystemAssigned identity)</text>
+  <text x="328" y="270" font-size="11.5" fill="#37474f">Tagged Project=keda-gpu-scaler · ManagedBy=terraform</text>
+
+  <!-- Node resource group -->
+  <rect x="310" y="300" width="860" height="322" rx="9" fill="#eaf2fb" stroke="#5b9bd5" stroke-width="2"/>
+  <text x="328" y="322" font-size="12.5" font-weight="bold" fill="#2e5b8a">Node resource group: MC_keda-gpu-scaler-test-rg_keda-gpu-scaler-test_eastus  (created &amp; owned by AKS)</text>
+
+  <!-- GPU node -->
+  <rect x="330" y="338" width="250" height="270" rx="7" fill="#fff3e0" stroke="#fb8c00" stroke-width="2"/>
+  <text x="455" y="358" text-anchor="middle" font-size="12" font-weight="bold" fill="#e65100">GPU node ×1</text>
+  <text x="455" y="375" text-anchor="middle" font-size="10.5" fill="#bf6000">Standard_NC4as_T4_v3 · 1× NVIDIA T4 (16 GB)</text>
+  <text x="455" y="391" text-anchor="middle" font-size="10.5" fill="#bf6000">gpu_driver = None (operator owns the driver)</text>
+
+  <rect x="344" y="406" width="222" height="34" rx="5" fill="#ede7f6" stroke="#7e57c2" stroke-width="1.6"/>
+  <text x="455" y="427" text-anchor="middle" font-size="11" fill="#4527a0">NVIDIA GPU Operator</text>
+  <rect x="344" y="446" width="222" height="34" rx="5" fill="#ede7f6" stroke="#7e57c2" stroke-width="1.6"/>
+  <text x="455" y="467" text-anchor="middle" font-size="11" fill="#4527a0">KEDA</text>
+  <rect x="344" y="486" width="222" height="52" rx="5" fill="#e1f5fe" stroke="#0288d1" stroke-width="2"/>
+  <text x="455" y="505" text-anchor="middle" font-size="11" font-weight="bold" fill="#01579b">keda-gpu-scaler (DaemonSet)</text>
+  <text x="455" y="521" text-anchor="middle" font-size="9.5" fill="#0277bd">reads NVML · serves gRPC :6000</text>
+  <text x="455" y="560" text-anchor="middle" font-size="10.5" fill="#90a4ae">single untainted default pool —</text>
+  <text x="455" y="576" text-anchor="middle" font-size="10.5" fill="#90a4ae">operator, KEDA, CoreDNS co-locate here</text>
+
+  <!-- AKS-managed infrastructure -->
+  <rect x="604" y="338" width="552" height="270" rx="7" fill="#f3f8fd" stroke="#5b9bd5" stroke-width="1.8"/>
+  <text x="620" y="360" font-size="12.5" font-weight="bold" fill="#2e5b8a">AKS-managed infrastructure</text>
+  <rect x="620" y="374" width="300" height="38" rx="6" fill="#fffde7" stroke="#fbc02d" stroke-width="1.8"/>
+  <text x="770" y="398" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#8a6d0a">Standard Load Balancer (outbound)</text>
+  <text x="620" y="436" font-size="11.5" fill="#37474f">• Virtual Machine Scale Set (the GPU node)</text>
+  <text x="620" y="458" font-size="11.5" fill="#37474f">• NSG + route table</text>
+  <text x="620" y="480" font-size="11.5" fill="#37474f">• Managed OS disk (100 GiB)</text>
+  <text x="620" y="502" font-size="11.5" fill="#37474f">• VNet + subnet (AKS-managed)</text>
+  <text x="620" y="524" font-size="11.5" fill="#37474f">• Kubelet managed identity</text>
+  <text x="620" y="556" font-size="10.5" fill="#90a4ae">Provisioned server-side by the AKS resource</text>
+  <text x="620" y="572" font-size="10.5" fill="#90a4ae">provider — not separate Terraform resources.</text>
+
+  <!-- egress arrow: node -> LB -->
+  <line x1="566" y1="452" x2="618" y2="400" stroke="#2e7d32" stroke-width="1.8" stroke-dasharray="5,4" marker-end="url(#arrowg)"/>
+  <text x="560" y="438" font-size="10" fill="#2e7d32">egress</text>
+
+  <!-- control plane manages node -->
+  <line x1="700" y1="190" x2="545" y2="336" stroke="#0078d4" stroke-width="1.6" stroke-dasharray="2,3" marker-end="url(#arrowa)"/>
+  <text x="648" y="268" font-size="10" fill="#005a9e" transform="rotate(43 648 268)">manages / schedules</text>
+
+  <!-- Bottom: what terraform installs -->
+  <rect x="310" y="634" width="860" height="132" rx="9" fill="#f3e5f5" stroke="#8e24aa" stroke-width="2"/>
+  <text x="328" y="656" font-size="13" font-weight="bold" fill="#6a1b9a">Installed onto the GPU node by Terraform (via Helm):</text>
+  <text x="328" y="680" font-size="11.5" fill="#4a148c">• NVIDIA GPU Operator → installs driver + toolkit + device-plugin (gpu_driver=None), labels node nvidia.com/gpu.present=true, creates `nvidia` RuntimeClass</text>
+  <text x="328" y="702" font-size="11.5" fill="#4a148c">• KEDA → the autoscaler engine   ·   keda-gpu-scaler → reads the real GPU via NVML, serves metrics to KEDA over gRPC :6000</text>
+  <text x="328" y="724" font-size="11.5" fill="#4a148c">• Demo (manual test): demo-app Deployment + ScaledObject + gpu-burn Job → watch pods scale on GPU load</text>
+
+  <!-- legend note -->
+  <text x="1156" y="628" text-anchor="end" font-size="10" fill="#9e9e9e">dashed = network/control flow</text>
+</svg>
