@@ -22,7 +22,7 @@ Technical direction for keda-gpu-scaler. Updated as priorities shift.
 
 - ✅ **MIG support** — Per-instance metrics for Multi-Instance GPU partitions. `CollectAll` enumerates MIG compute instances automatically; HPC environments resolve MIG UUIDs via `CollectByUUID`. ([#26](https://github.com/pmady/keda-gpu-scaler/issues/26))
 - **New scaling profiles** — TGI, Ollama ([#64](https://github.com/pmady/keda-gpu-scaler/issues/64), [#65](https://github.com/pmady/keda-gpu-scaler/issues/65))
-- **vLLM queue depth** — Scale on pending requests via vLLM engine API ([#28](https://github.com/pmady/keda-gpu-scaler/issues/28))
+- ✅ **vLLM queue depth** — Scale on pending requests via vLLM engine API. `pkg/vllm` scrapes `vllm:num_requests_waiting` (and `vllm:gpu_cache_usage_perc`) from the engine's `/metrics` endpoint; new `vllm_queue_depth` / `vllm_kv_cache_usage` metric types and the `vllm-queue-depth` profile expose it to KEDA. ([#28](https://github.com/pmady/keda-gpu-scaler/issues/28))
 - **Improved aggregation** — p95, p99 percentile methods ([#69](https://github.com/pmady/keda-gpu-scaler/issues/69))
 - **CI/CD hardening** — golangci-lint config, go vet, test coverage, pre-commit hooks ([#72](https://github.com/pmady/keda-gpu-scaler/issues/72), [#73](https://github.com/pmady/keda-gpu-scaler/issues/73), [#74](https://github.com/pmady/keda-gpu-scaler/issues/74), [#76](https://github.com/pmady/keda-gpu-scaler/issues/76))
 - **Grafana dashboard** for GPU fleet visibility ([#29](https://github.com/pmady/keda-gpu-scaler/issues/29))

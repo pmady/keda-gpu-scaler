@@ -22,6 +22,8 @@ package e2e
 import (
 	"context"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -666,5 +668,109 @@ func TestAggregationSum(t *testing.T) {
 	got := resp.MetricValues[0].MetricValueFloat
 	if got != 100 {
 		t.Errorf("sum aggregation = %v, want 100", got)
+	}
+}
+
+// fakeVLLMEngine stands in for a vLLM server's Prometheus /metrics endpoint,
+// so the vLLM queue-depth path can be exercised end-to-end through the real
+// gRPC server without needing an actual vLLM deployment (issue #28).
+func fakeVLLMEngine(t *testing.T, body string) (string, func()) {
+	t.Helper()
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(body))
+	}))
+	return ts.URL, ts.Close
+}
+
+const fakeVLLMEngineMetrics = `# HELP vllm:num_requests_waiting Number of requests waiting
+# TYPE vllm:num_requests_waiting gauge
+vllm:num_requests_waiting{model_name="llama-7b"} 14
+# HELP vllm:gpu_cache_usage_perc GPU KV cache usage
+# TYPE vllm:gpu_cache_usage_perc gauge
+vllm:gpu_cache_usage_perc 0.63
+`
+
+// End-to-end coverage for reading pending request count directly from the
+// vLLM engine API (issue #28): a real gRPC server backed by GPUExternalScaler
+// scrapes a fake vLLM metrics endpoint and reports queue depth through
+// IsActive / GetMetricSpec / GetMetrics, exactly as KEDA would consume it.
+func TestVLLMQueueDepthE2E(t *testing.T) {
+	vllmURL, vllmCleanup := fakeVLLMEngine(t, fakeVLLMEngineMetrics)
+	defer vllmCleanup()
+
+	// GPU devices are irrelevant for this metric type but the collector
+	// still needs at least one so unrelated calls on the same server don't
+	// error out.
+	devices := []gpu.Metrics{{Index: 0, GPUUtilization: 10}}
+	addr, cleanup := startTestServer(t, devices)
+	defer cleanup()
+
+	conn, client := dialScaler(t, addr)
+	defer conn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	metadata := map[string]string{
+		"profile":      "vllm-queue-depth",
+		"vllmEndpoint": vllmURL,
+	}
+	ref := &pb.ScaledObjectRef{
+		Name:           "vllm-e2e-test",
+		Namespace:      "ai-workloads",
+		ScalerMetadata: metadata,
+	}
+
+	specResp, err := client.GetMetricSpec(ctx, ref)
+	if err != nil {
+		t.Fatalf("GetMetricSpec failed: %v", err)
+	}
+	if len(specResp.MetricSpecs) != 1 || specResp.MetricSpecs[0].MetricName != "keda_gpu_vllm_queue_depth" {
+		t.Fatalf("GetMetricSpec = %+v, want metric name keda_gpu_vllm_queue_depth", specResp.MetricSpecs)
+	}
+
+	metricsResp, err := client.GetMetrics(ctx, &pb.GetMetricsRequest{
+		ScaledObjectRef: ref,
+		MetricName:      specResp.MetricSpecs[0].MetricName,
+	})
+	if err != nil {
+		t.Fatalf("GetMetrics failed: %v", err)
+	}
+	if got := metricsResp.MetricValues[0].MetricValueFloat; got != 14 {
+		t.Errorf("GetMetrics queue depth = %v, want 14 (from vllm:num_requests_waiting)", got)
+	}
+
+	// Queue depth 14 > the vllm-queue-depth profile's activation threshold
+	// (1), so the deployment should be reported active.
+	activeResp, err := client.IsActive(ctx, ref)
+	if err != nil {
+		t.Fatalf("IsActive failed: %v", err)
+	}
+	if !activeResp.Result {
+		t.Error("IsActive() = false, want true (queue depth 14 > activation threshold 1)")
+	}
+}
+
+// A ScaledObject requesting a vLLM metric type without vllmEndpoint must
+// fail fast with a clear error rather than silently falling back to NVML.
+func TestVLLMQueueDepthE2E_MissingEndpoint(t *testing.T) {
+	devices := []gpu.Metrics{{Index: 0, GPUUtilization: 10}}
+	addr, cleanup := startTestServer(t, devices)
+	defer cleanup()
+
+	conn, client := dialScaler(t, addr)
+	defer conn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err := client.IsActive(ctx, &pb.ScaledObjectRef{
+		Name:           "vllm-e2e-missing-endpoint",
+		Namespace:      "ai-workloads",
+		ScalerMetadata: map[string]string{"metricType": "vllm_queue_depth"},
+	})
+	if err == nil {
+		t.Error("IsActive() with vllm_queue_depth and no vllmEndpoint should return an error")
 	}
 }

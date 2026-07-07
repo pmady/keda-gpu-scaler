@@ -63,6 +63,11 @@ This design is documented in [KEDA issue #7538](https://github.com/kedacore/keda
 | `pcie_rx_kbps` | PCIe receive throughput (GPU→CPU) | KB/s |
 | `nvlink_tx_mbps` | NVLink transmit throughput (GPU→GPU) | MB/s |
 | `nvlink_rx_mbps` | NVLink receive throughput (GPU→GPU) | MB/s |
+| `vllm_queue_depth` | Pending requests waiting in the vLLM engine — requires `vllmEndpoint` | count |
+| `vllm_kv_cache_usage` | vLLM GPU KV cache usage — requires `vllmEndpoint` | % (0-100) |
+
+The `vllm_*` metrics come from the vLLM engine's own `/metrics` endpoint
+rather than NVML — see [docs/configuration.md](docs/configuration.md#vllm-engine-metrics).
 
 ---
 
@@ -73,6 +78,7 @@ Instead of configuring raw metric thresholds, use a profile optimized for your w
 | Profile | Primary Metric | Target | Activation | Use Case |
 |---------|---------------|--------|------------|----------|
 | `vllm-inference` | Memory % | 80 | 5 | vLLM / LLM serving with scale-to-zero |
+| `vllm-queue-depth` | Pending requests | 5 | 1 | vLLM — scale on queue depth via the engine API for faster reaction time |
 | `triton-inference` | GPU Util | 75 | 10 | NVIDIA Triton Inference Server |
 | `training` | GPU Util | 90 | 0 | Training jobs (no scale-to-zero) |
 | `batch` | Memory % | 70 | 1 | Batch inference with aggressive scale-down |
@@ -393,7 +399,7 @@ Using keda-gpu-scaler? Add your organization to [ADOPTERS.md](ADOPTERS.md).
 
 - AMD ROCm support
 - MIG per-instance metrics
-- vLLM queue depth scaling
+- ~~vLLM queue depth scaling~~ — available via the `vllm_queue_depth` metric type / `vllm-queue-depth` profile; see [docs/configuration.md](docs/configuration.md#vllm-engine-metrics)
 
 ---
 

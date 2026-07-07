@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - **MIG (Multi-Instance GPU) per-instance metrics**. `CollectAll()` auto-detects MIG-enabled GPUs and enumerates each compute instance via NVML, returning one `Metrics` entry per instance instead of one per physical GPU. Shared chip-level metrics (temperature, power, PCIe, NVLink) are read from the parent GPU and copied into every instance. In HPC environments (SLURM, Flux), MIG UUIDs in `CUDA_VISIBLE_DEVICES` are detected and resolved individually via `CollectByUUID()`. New `Metrics` fields: `IsMIGInstance`, `ParentIndex`, `MigProfile`. New CSV columns: `is_mig_instance`, `parent_index`, `mig_profile`. Table output shows `gpu<N>/inst<M>` labels for MIG rows.
+- **vLLM queue depth and KV cache usage scaling** (`pkg/vllm`). Reads pending request count directly from the vLLM engine's Prometheus `/metrics` endpoint instead of relying on GPU utilization as a proxy, for faster scaling reaction time ([#28](https://github.com/pmady/keda-gpu-scaler/issues/28)). New `vllm_queue_depth` (`vllm:num_requests_waiting`) and `vllm_kv_cache_usage` (`vllm:gpu_cache_usage_perc`) metric types, a new `vllmEndpoint` trigger parameter, and a `vllm-queue-depth` pre-built profile. vLLM clients are cached per endpoint on the scaler.
 
 ## [v0.5.0] - 2026-06-23
 

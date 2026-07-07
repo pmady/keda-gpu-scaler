@@ -15,6 +15,7 @@ Everything goes in the ScaledObject trigger `metadata`. No config files or extra
 | `gpuIndex` | Specific GPU index to monitor | `-1` (all GPUs) |
 | `aggregation` | Multi-GPU aggregation: `max`, `min`, `avg`, `sum` | `max` |
 | `pollIntervalSeconds` | Metric polling interval | `10` |
+| `vllmEndpoint` | vLLM engine metrics URL, e.g. `http://vllm-svc:8000/metrics`. Required when `metricType` is `vllm_queue_depth` or `vllm_kv_cache_usage` | (none) |
 
 ### Supported metricType values
 
@@ -30,6 +31,11 @@ Everything goes in the ScaledObject trigger `metadata`. No config files or extra
 | `pcie_rx_kbps` | KB/s | PCIe receive throughput (GPU→CPU) |
 | `nvlink_tx_mbps` | MB/s | Aggregate NVLink transmit throughput across all active links |
 | `nvlink_rx_mbps` | MB/s | Aggregate NVLink receive throughput across all active links |
+| `vllm_queue_depth` | count | Pending requests waiting in the vLLM engine (`vllm:num_requests_waiting`) — requires `vllmEndpoint`, see [vLLM Engine Metrics](#vllm-engine-metrics) |
+| `vllm_kv_cache_usage` | % | vLLM GPU KV cache usage (`vllm:gpu_cache_usage_perc`, normalized to 0-100) — requires `vllmEndpoint`, see [vLLM Engine Metrics](#vllm-engine-metrics) |
+
+The `vllm_*` metrics bypass NVML entirely and are scraped directly from the
+vLLM engine's own metrics endpoint.
 
 ## Scaling Profiles
 
@@ -38,6 +44,7 @@ Profiles bundle defaults for common workloads. Override any parameter in the tri
 | Profile | Primary Metric | Target | Activation | Use Case |
 |---------|---------------|--------|------------|----------|
 | `vllm-inference` | Memory % | 80 | 5 | vLLM / LLM serving with scale-to-zero |
+| `vllm-queue-depth` | Pending requests | 5 | 1 | vLLM — scale on queue depth via the engine API, see [vLLM Engine Metrics](#vllm-engine-metrics) |
 | `triton-inference` | GPU Util | 75 | 10 | NVIDIA Triton Inference Server |
 | `training` | GPU Util | 90 | 0 | Training jobs (no scale-to-zero) |
 | `batch` | Memory % | 70 | 1 | Batch inference with aggressive scale-down |
@@ -114,6 +121,45 @@ triggers:
 ### NVLink availability
 
 On hardware without NVLink (T4, A10, etc.) the NVLink metrics are always `0`. If you configure a ScaledObject with an NVLink metric type on non-NVLink hardware, KEDA will see `0` and scale to zero if `activationThreshold > 0`. Use PCIe metrics on those nodes instead.
+
+## vLLM Engine Metrics
+
+GPU utilization and VRAM usage (the `vllm-inference` profile) are proxies for load — they tell you the GPU is busy, not how many requests are actually waiting. vLLM's own engine exposes that directly via its Prometheus `/metrics` endpoint, and `pkg/vllm` scrapes it so KEDA can scale on the real signal instead of waiting for a utilization or memory spike.
+
+| metricType | Source metric | What it tells you |
+|------------|----------------|--------------------|
+| `vllm_queue_depth` | `vllm:num_requests_waiting` | Requests queued behind the running batch — the most direct signal for "we need more replicas now" |
+| `vllm_kv_cache_usage` | `vllm:gpu_cache_usage_perc` | How full the KV cache is (0-100%) — a leading indicator before requests start queuing |
+
+Both require `vllmEndpoint` — the full URL of the vLLM engine's metrics endpoint (e.g. `http://vllm-svc:8000/metrics`), reachable from the scaler DaemonSet pods. `vllmEndpoint` has nothing to do with NVML: it's a plain HTTP scrape of the inference server itself. `getMetricValue` routes any `vllm_*` metricType to this HTTP client instead of the NVML collector; the scaler keeps one cached client per distinct `vllmEndpoint`.
+
+### Using the vllm-queue-depth profile
+
+```yaml
+triggers:
+  - type: external
+    metadata:
+      scalerAddress: "keda-gpu-scaler.keda.svc.cluster.local:6000"
+      profile: "vllm-queue-depth"
+      vllmEndpoint: "http://vllm-deepseek-deployment:8000/metrics"
+```
+
+### Using vllm_kv_cache_usage directly
+
+```yaml
+triggers:
+  - type: external
+    metadata:
+      scalerAddress: "keda-gpu-scaler.keda.svc.cluster.local:6000"
+      metricType: "vllm_kv_cache_usage"
+      vllmEndpoint: "http://vllm-deepseek-deployment:8000/metrics"
+      targetValue: "80"           # scale out once KV cache is 80% full
+      activationThreshold: "5"
+```
+
+### vllm-inference vs. vllm-queue-depth
+
+Use `vllm-inference` (VRAM-based) as a simple default — it needs no extra endpoint and scale-to-zero works out of the box. Switch to `vllm-queue-depth` (or raw `vllm_queue_depth` / `vllm_kv_cache_usage`) when you want faster reaction to load spikes than VRAM pressure alone provides, and can reach the vLLM engine's metrics port from the scaler's DaemonSet pods.
 
 ## Multi-GPU Aggregation
 
@@ -198,4 +244,5 @@ When `--probe-port` is non-zero, an HTTP server exposes:
 Check `deploy/examples/` for ScaledObject manifests:
 
 - `vllm-scaledobject.yaml` — vLLM inference with scale-to-zero
+- `vllm-queue-depth-scaledobject.yaml` — vLLM queue depth scaling via the engine API
 - `custom-gpu-utilization.yaml` — raw GPU utilization scaling

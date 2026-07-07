@@ -77,6 +77,7 @@ Raw metric thresholds are error-prone if you don't know what "80% GPU utilizatio
 | Profile | What it optimizes for |
 |---------|----------------------|
 | `vllm-inference` | LLM serving. Scales on VRAM pressure (80%) because vLLM pre-allocates KV cache. Activation threshold at 5% for scale-to-zero. |
+| `vllm-queue-depth` | LLM serving. Scales on pending requests (target 5) read from the vLLM engine API — faster reaction than waiting for VRAM/utilization to move. Activation at 1 request. |
 | `triton-inference` | Multi-model serving. Scales on SM utilization (75%) because Triton shares GPU across models. Higher activation (10%) to avoid flapping. |
 | `training` | Batch training. Scales on SM utilization (90%) with no scale-to-zero (activation 0) to avoid killing checkpoints. |
 | `batch` | Offline batch inference. Aggressive scale-down with 70% memory threshold and low activation (1%). |
@@ -168,8 +169,16 @@ Extra `Metrics` fields: `IsMIGInstance` (bool), `ParentIndex` (int, -1 for UUID 
 
 If MIG is enabled but no instances exist (GPU not yet partitioned), `collectMIGInstances` logs a warning and returns nothing. `CollectDevice()` on MIG GPUs returns physical-level metrics only and logs a warning.
 
+## vLLM Engine Metrics (`pkg/vllm`)
+
+GPU utilization and VRAM are proxies for load on a vLLM server — they say the GPU is busy, not how many requests are actually queued. vLLM exposes the real signal on its own Prometheus `/metrics` endpoint, so `pkg/vllm.Client` scrapes it directly instead of routing through NVML.
+
+`Client.Scrape()` fetches the vLLM engine's metrics endpoint and parses the exposition-format text into an `EngineMetrics` struct, pulling `vllm:num_requests_waiting` (queue depth), `vllm:num_requests_running`, `vllm:gpu_cache_usage_perc` (KV cache usage), and `vllm:num_requests_swapped`; everything else is ignored. `getVLLMMetricValue` in `pkg/scaler` maps `vllm_queue_depth` and `vllm_kv_cache_usage` (normalized 0–100) to these fields, and `parseMetadata` requires `vllmEndpoint` whenever the requested `metricType` is one of them. The scaler caches one `vllm.Client` per distinct endpoint rather than reconnecting on every poll.
+
+Because this bypasses NVML entirely, it needs no GPU driver access — only HTTP reachability from the scaler DaemonSet pods to the vLLM Service. See `docs/configuration.md#vllm-engine-metrics` for usage.
+
 ## Future Work
 
 - **AMD ROCm support**: Same DaemonSet pattern, different hardware library (`rocm-smi`)
 - **NVLink topology**: Prefer scaling on nodes with direct GPU-to-GPU interconnect
-- **vLLM queue depth**: Read pending request count directly from vLLM's engine API for more precise scaling
+- ~~**vLLM queue depth**: Read pending request count directly from vLLM's engine API for more precise scaling~~ — implemented as `pkg/vllm` (see above); see `docs/configuration.md#vllm-engine-metrics`

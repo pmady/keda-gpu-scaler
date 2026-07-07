@@ -1,0 +1,32 @@
+# Example: ScaledObject for a vLLM inference deployment that scales on
+# pending request count (queue depth), read directly from the vLLM engine's
+# own metrics endpoint instead of GPU utilization/memory.
+#
+# Prerequisites:
+#   - keda-gpu-scaler DaemonSet running (kubectl apply -f deploy/manifests.yaml)
+#   - KEDA v2.10+ installed
+#   - A Deployment named "vllm-deepseek-deployment" in the "ai-workloads" namespace,
+#     with a Service exposing vLLM's Prometheus metrics endpoint (default :8000/metrics)
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: vllm-queue-depth-scaler
+  namespace: ai-workloads
+spec:
+  scaleTargetRef:
+    name: vllm-deepseek-deployment
+  minReplicaCount: 1
+  maxReplicaCount: 50
+  cooldownPeriod: 30
+  triggers:
+    - type: external
+      metadata:
+        # Points to the Service created by deploy/manifests.yaml
+        scalerAddress: "keda-gpu-scaler.keda.svc.cluster.local:6000"
+        # Use the pre-built vLLM queue-depth profile (target: 5 pending
+        # requests, activation: 1). Override targetValue/activationThreshold
+        # here to tune for your workload.
+        profile: "vllm-queue-depth"
+        # The vLLM engine's own metrics endpoint — required for
+        # vllm_queue_depth / vllm_kv_cache_usage metric types.
+        vllmEndpoint: "http://vllm-deepseek-deployment:8000/metrics"

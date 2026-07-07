@@ -49,8 +49,14 @@ triggers:
       profile: "vllm-inference"
 ```
 
-Available profiles: `vllm-inference`, `triton-inference`, `training`, `batch`,
-`distributed-training`.
+Available profiles: `vllm-inference`, `vllm-queue-depth`, `triton-inference`,
+`training`, `batch`, `distributed-training`.
+
+`vllm-queue-depth` scales on pending requests read from the vLLM engine's own
+metrics endpoint rather than GPU utilization/memory, and requires a
+`vllmEndpoint` trigger parameter pointing at it (e.g.
+`http://vllm-deployment:8000/metrics`) — see the repo's
+`docs/configuration.md#vllm-engine-metrics`.
 
 ## Parameters
 
