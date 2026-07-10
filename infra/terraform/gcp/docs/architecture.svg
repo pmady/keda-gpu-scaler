@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1220 856" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 z" fill="#455a64"/>
+    </marker>
+    <marker id="arrowa" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 z" fill="#188038"/>
+    </marker>
+    <marker id="arrowb" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 z" fill="#0277bd"/>
+    </marker>
+    <marker id="arrowc" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 z" fill="#3949ab"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1220" height="856" fill="#ffffff"/>
+  <text x="610" y="34" text-anchor="middle" font-size="24" font-weight="bold" fill="#1a237e">keda-gpu-scaler — GCP GKE test cluster (infra/terraform/gcp)</text>
+  <text x="610" y="58" text-anchor="middle" font-size="13" fill="#607d8b">One `terraform apply` builds everything below. Fixed 1 GPU node, untainted — no autoscaler (predictable + cheap).</text>
+
+  <!-- Operator -->
+  <rect x="30" y="120" width="190" height="195" rx="8" fill="#eceff1" stroke="#607d8b" stroke-width="2"/>
+  <text x="125" y="146" text-anchor="middle" font-size="14" font-weight="bold" fill="#37474f">Operator (your machine)</text>
+  <text x="46" y="176" font-size="12.5" fill="#37474f">• terraform apply</text>
+  <text x="46" y="200" font-size="12.5" fill="#37474f">• gcloud CLI (ADC)</text>
+  <text x="46" y="224" font-size="12.5" fill="#37474f">• kubectl</text>
+  <text x="46" y="256" font-size="11" fill="#78909c">Provisions the cluster and</text>
+  <text x="46" y="272" font-size="11" fill="#78909c">drives it over HTTPS via a</text>
+  <text x="46" y="288" font-size="11" fill="#78909c">short-lived gcloud ADC token.</text>
+
+  <!-- arrow operator -> GCP -->
+  <line x1="222" y1="205" x2="288" y2="205" stroke="#455a64" stroke-width="2.5" marker-end="url(#arrow)"/>
+
+  <!-- GCP Cloud -->
+  <rect x="290" y="90" width="900" height="732" rx="10" fill="#e8f5e9" stroke="#188038" stroke-width="2.5"/>
+  <text x="308" y="112" font-size="15" font-weight="bold" fill="#0f5132">GCP — Region: us-central1 · Zone: us-central1-a</text>
+  <text x="312" y="146" font-size="11" fill="#607d8b">↑ to Internet (image + KEDA / GPU-operator Helm chart pulls) via node public IPs + VPC default route</text>
+
+  <!-- GKE control plane -->
+  <rect x="690" y="120" width="480" height="70" rx="8" fill="#c8e6c9" stroke="#188038" stroke-width="2"/>
+  <text x="930" y="148" text-anchor="middle" font-size="14" font-weight="bold" fill="#0f5132">GKE — Managed Control Plane</text>
+  <text x="930" y="170" text-anchor="middle" font-size="12" fill="#0f5132">Kubernetes API server (public endpoint)</text>
+  <!-- operator -> GKE API -->
+  <line x1="222" y1="168" x2="688" y2="150" stroke="#455a64" stroke-width="1.6" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+  <text x="470" y="138" text-anchor="middle" font-size="10.5" fill="#607d8b">kubectl / gcloud ADC token (HTTPS)</text>
+
+  <!-- VPC + subnet -->
+  <rect x="310" y="208" width="860" height="78" rx="9" fill="#eef7f0" stroke="#43a047" stroke-width="2"/>
+  <text x="328" y="230" font-size="14" font-weight="bold" fill="#1b5e20">VPC + subnet (VPC-native, alias IP)</text>
+  <text x="328" y="252" font-size="11.5" fill="#37474f">google_compute_network + google_compute_subnetwork · primary CIDR 10.0.0.0/20</text>
+  <text x="328" y="270" font-size="11.5" fill="#37474f">Secondary ranges: pods 10.4.0.0/14 · services 10.8.0.0/20</text>
+
+  <!-- Cluster container -->
+  <rect x="310" y="300" width="860" height="314" rx="9" fill="#eef7f0" stroke="#43a047" stroke-width="2"/>
+  <text x="328" y="322" font-size="12.5" font-weight="bold" fill="#1b5e20">google_container_cluster.primary — zonal, location=us-central1-a  (single untainted node pool below)</text>
+
+  <!-- GPU node (single, full-width) -->
+  <rect x="330" y="338" width="810" height="254" rx="7" fill="#fff3e0" stroke="#fb8c00" stroke-width="2"/>
+  <text x="735" y="358" text-anchor="middle" font-size="12" font-weight="bold" fill="#e65100">GPU node ×1 · n1-standard-4 + 1× nvidia-tesla-t4 (T4, 16 GB) · Ubuntu</text>
+  <text x="735" y="374" text-anchor="middle" font-size="10.5" fill="#bf6000">gpu_driver = INSTALLATION_DISABLED (operator owns the driver)</text>
+  <text x="735" y="390" text-anchor="middle" font-size="11" font-weight="bold" fill="#c2410c">untainted — operator, KEDA, CoreDNS + scaler all co-locate here</text>
+
+  <rect x="344" y="402" width="386" height="34" rx="5" fill="#ede7f6" stroke="#7e57c2" stroke-width="1.6"/>
+  <text x="537" y="423" text-anchor="middle" font-size="10.5" fill="#4527a0">NVIDIA GPU Operator (driver + toolkit + device plugin + GFD)</text>
+  <rect x="344" y="442" width="386" height="34" rx="5" fill="#ede7f6" stroke="#7e57c2" stroke-width="1.6"/>
+  <text x="537" y="463" text-anchor="middle" font-size="11" fill="#4527a0">KEDA (operator + metrics server)</text>
+  <rect x="344" y="482" width="386" height="34" rx="5" fill="#ede7f6" stroke="#7e57c2" stroke-width="1.6"/>
+  <text x="537" y="503" text-anchor="middle" font-size="11" fill="#4527a0">CoreDNS / kube-dns</text>
+
+  <rect x="742" y="402" width="384" height="114" rx="5" fill="#e1f5fe" stroke="#0288d1" stroke-width="2"/>
+  <text x="934" y="426" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#01579b">keda-gpu-scaler (DaemonSet)</text>
+  <text x="934" y="446" text-anchor="middle" font-size="10" fill="#0277bd">reads NVML directly</text>
+  <text x="934" y="464" text-anchor="middle" font-size="10" fill="#0277bd">serves gRPC :6000</text>
+  <text x="934" y="486" text-anchor="middle" font-size="9.5" fill="#0288d1">runtimeClassName: nvidia</text>
+  <text x="934" y="502" text-anchor="middle" font-size="9.5" fill="#0288d1">privileged, nvidia.com/gpu resource</text>
+
+  <!-- demo-app Deployment (scale target) -->
+  <rect x="742" y="524" width="384" height="54" rx="5" fill="#e8eaf6" stroke="#3949ab" stroke-width="2"/>
+  <text x="934" y="546" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#1a237e">demo-app Deployment (scale target)</text>
+  <text x="934" y="566" text-anchor="middle" font-size="9.5" fill="#3949ab">replicas 1 → 5 under GPU load · back to 1 when idle</text>
+
+  <!-- metrics: scaler -> KEDA (gRPC :6000) -->
+  <line x1="742" y1="452" x2="731" y2="452" stroke="#0277bd" stroke-width="1.8" marker-end="url(#arrowb)"/>
+  <!-- KEDA -> scales demo-app -->
+  <line x1="730" y1="470" x2="742" y2="540" stroke="#3949ab" stroke-width="2" marker-end="url(#arrowc)"/>
+  <text x="537" y="536" text-anchor="middle" font-size="10" fill="#0277bd">scaler → KEDA: gRPC :6000 metrics</text>
+  <text x="537" y="554" text-anchor="middle" font-size="10" fill="#3949ab">KEDA → scales demo-app 1→5</text>
+
+  <!-- control plane manages node pool -->
+  <line x1="700" y1="190" x2="700" y2="336" stroke="#188038" stroke-width="1.6" stroke-dasharray="2,3" marker-end="url(#arrowa)"/>
+  <text x="712" y="268" font-size="10" fill="#0f5132">manages / schedules</text>
+
+  <!-- Bottom: what terraform installs -->
+  <rect x="310" y="634" width="860" height="176" rx="9" fill="#f3e5f5" stroke="#8e24aa" stroke-width="2"/>
+  <text x="328" y="656" font-size="13" font-weight="bold" fill="#6a1b9a">Installed by Terraform (via Helm):</text>
+  <text x="328" y="678" font-size="11.5" fill="#4a148c">• NVIDIA GPU Operator → driver + toolkit + device plugin + `nvidia` RuntimeClass + GFD label</text>
+  <text x="328" y="696" font-size="11.5" fill="#4a148c">  (driver.enabled=true, toolkit.enabled=true, dcgm off) · CNI fix RUNTIME_CONFIG_SOURCE=file (#1222) · CDI on</text>
+  <text x="328" y="714" font-size="11.5" fill="#4a148c">• PriorityClass ResourceQuota (gpu-operator-critical-pods) → admits system-node-critical/-cluster-critical pods</text>
+  <text x="328" y="732" font-size="11.5" fill="#4a148c">• KEDA (autoscaler engine)   ·   keda-gpu-scaler → reads the real GPU via NVML, serves metrics to KEDA over gRPC :6000</text>
+  <text x="328" y="750" font-size="11.5" fill="#4a148c">• All releases install with wait=true — apply returns only once the single-pool GPU stack converges (~20 min)</text>
+  <text x="328" y="768" font-size="11.5" fill="#4a148c">• e2e demo fixtures (keda-gpu-scaler-e2e chart) → demo-app Deployment (scale target) + KEDA ScaledObject</text>
+  <text x="328" y="786" font-size="11.5" fill="#4a148c">  (external trigger → keda-gpu-scaler.keda.svc:6000) — KEDA scales demo-app 1→5 under GPU load, back to 1 when idle</text>
+
+  <!-- legend note -->
+  <text x="1156" y="628" text-anchor="end" font-size="10" fill="#9e9e9e">dashed = network/control flow</text>
+</svg>

@@ -1,0 +1,20 @@
+project_id         = "my-gcp-project"
+region             = "us-central1"
+zone               = "us-central1-a"
+cluster_name       = "keda-gpu-scaler-test"
+kubernetes_version = "1.33"
+gpu_machine_type   = "n1-standard-4"
+gpu_type           = "nvidia-tesla-t4"
+gpu_per_node       = 1
+gpu_node_count     = 1
+helm_timeout       = 1800
+
+gpu_operator_chart_version = "v26.3.2"
+keda_chart_version         = "2.20.1"
+
+scaler_image_repository = "ghcr.io/pmady/keda-gpu-scaler"
+scaler_image_tag        = "v0.5.0"
+
+labels = {
+  project = "keda-gpu-scaler"
+}
