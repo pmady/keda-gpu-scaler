@@ -43,7 +43,7 @@ infra/
   terraform/
     aws/        # Amazon EKS (implemented)
     azure/      # Azure AKS  (implemented)
-    # gcp/      # Google GKE (planned)
+    gcp/        # Google GKE (implemented)
     README.md   # index + per-cloud details
 ```
 

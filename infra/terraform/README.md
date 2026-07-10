@@ -37,6 +37,16 @@
 > az vm list-usage --location eastus \
 >   --query "[?contains(name.value, 'NCASv3_T4')]" -o table
 > ```
+>
+> GCP is the same story: fresh projects have a GPU quota of **0** — a global
+> GPU quota plus a per-region, per-type quota. The default T4 draws on
+> **`NVIDIA_T4_GPUS`** per region, so request an increase before applying.
+> Verify with:
+>
+> ```bash
+> gcloud compute regions describe us-central1 --project my-gcp-project \
+>   --format="table(quotas.filter(metric:'NVIDIA_T4_GPUS'))"
+> ```
 
 # Infrastructure-as-Code for keda-gpu-scaler
 
@@ -44,8 +54,7 @@ Terraform for standing up **throwaway** GPU-ready Kubernetes clusters to
 integration-test `keda-gpu-scaler` against real NVIDIA hardware. These are test
 clusters, not production infrastructure.
 
-AWS (EKS) and Azure (AKS) are implemented today; GCP is planned as a sibling
-directory.
+AWS (EKS), Azure (AKS), and GCP (GKE) are implemented today.
 
 ## Layout
 
@@ -53,19 +62,20 @@ directory.
 infra/terraform/
   aws/        # Amazon EKS (implemented)
   azure/      # Azure AKS  (implemented)
-  # gcp/      # Google GKE  (planned)
+  gcp/        # Google GKE  (implemented)
 ```
 
 Each cloud lives in its own self-contained, independently `apply`-able directory
 (its own providers, modules, variables, state). They deliberately do **not**
-share a root module, so adding GCP/Azure later is a matter of dropping in a
-sibling that follows the same convention — no rework of the AWS stack.
+share a root module, so adding another cloud is a matter of dropping in a
+sibling that follows the same convention — no rework of existing stacks.
 
 The shared contract every directory aims to honour:
 
 - one `terraform apply` produces a cluster immediately ready for integration
-  tests (GPU drivers + device plugin, KEDA, and `keda-gpu-scaler` installed from
-  the in-tree chart at `deploy/helm/keda-gpu-scaler`);
+  tests (GPU drivers + device plugin, KEDA, `keda-gpu-scaler`, and the e2e demo
+  fixtures — a scale target + `ScaledObject` — all installed from in-tree charts
+  under `deploy/helm/`);
 - the same `*_grpc_endpoint` / `configure_kubectl` style outputs;
 - resources tagged/labelled so a forgotten cluster is easy to find and destroy.
 
@@ -75,7 +85,7 @@ The shared contract every directory aims to honour:
 |---|---|---|
 | AWS EKS | [`aws/`](./aws) | ✅ Implemented |
 | Azure AKS | [`azure/`](./azure) | ✅ Implemented (single GPU node, GPU operator) |
-| GCP GKE | `gcp/` | ⏳ Planned |
+| GCP GKE | [`gcp/`](./gcp) | ✅ Implemented (single GPU node, GPU operator) |
 
 ## Conventions
 
@@ -351,3 +361,176 @@ az resource list --tag Project=keda-gpu-scaler -o table
 
 The GPU node is the untainted default pool, so KEDA, the operator controllers and
 CoreDNS co-locate with the scaler.
+
+---
+
+# GCP GKE GPU test cluster
+
+Sibling to the AWS and Azure stacks. One `terraform apply` provisions
+everything, no manual steps:
+
+- a VPC + subnet (native `google_compute_network`/`google_compute_subnetwork`,
+  VPC-native/alias-IP),
+- a **zonal** GKE control plane (single zone, cheap/predictable),
+- **one** untainted Ubuntu GPU node (`n1-standard-4` + 1× T4) that runs the
+  whole stack — the GPU operator, KEDA, CoreDNS, and the scaler,
+- the **NVIDIA GPU operator** owning the driver + container toolkit
+  (`driver.enabled=true`, `toolkit.enabled=true`) — the node sets
+  `gpu_driver_version = "INSTALLATION_DISABLED"` and the label
+  `gke-no-default-nvidia-gpu-device-plugin=true`, so GKE installs no GPU
+  software of its own,
+- **KEDA**, **keda-gpu-scaler**, and the **e2e demo fixtures** (a scale-target
+  Deployment + `ScaledObject`, from the shared `keda-gpu-scaler-e2e` chart via
+  `e2e.tf`) — all from in-tree charts.
+
+This now matches the AWS/Azure single-untainted-pool design: GKE only taints
+a GPU node when GKE itself manages the GPU, and here it doesn't — the
+operator does — so the node stays untainted and everything co-locates on it.
+
+## Architecture
+
+![Architecture of the GCP GKE test cluster](gcp/docs/architecture.svg)
+
+## Pinned versions
+
+Confirmed against current sources before authoring — the Terraform Registry /
+provider docs for provider versions and resource schemas, and Google Cloud
+documentation for GKE GPU guidance (disabling GKE's native driver install +
+default device plugin so the NVIDIA GPU operator owns the driver + toolkit):
+
+| Component | Pin | Notes |
+|---|---|---|
+| Terraform | `1.15.6` (floor `>= 1.15.0`) | `.terraform-version` |
+| google provider | `~> 6.0` | |
+| kubernetes / helm providers | `~> 3.2` | |
+| Kubernetes (GKE) | `1.33` | no default (required); `terraform.tfvars.example` sets `1.33`, current in-support minor |
+| GPU machine | `n1-standard-4` + `nvidia-tesla-t4` | 1× NVIDIA T4 |
+| NVIDIA GPU operator chart | `v26.3.2` | |
+| KEDA chart | `2.20.1` | |
+| scaler image | `ghcr.io/pmady/keda-gpu-scaler:v0.5.0` | chart `appVersion` has no published image, so pin a real tag |
+
+## Methodology
+
+- **Native `google_container_cluster` + `google_compute_network`, not a
+  community module** (like the Azure native approach).
+- **Operator owns the driver + toolkit.** The GPU node sets
+  `gpu_driver_version = "INSTALLATION_DISABLED"` and the label
+  `gke-no-default-nvidia-gpu-device-plugin=true`, so GKE hands off entirely —
+  no driver install, no default device plugin, and (since GKE only taints a
+  node it manages the GPU on) no taint. The result is a single untainted node.
+  Mirrors the Azure stack.
+- **CNI fix (`RUNTIME_CONFIG_SOURCE=file`) — still required.** The toolkit
+  rewrites `/etc/containerd/config.toml` and would reset GKE's CNI `bin_dir`
+  (`/home/kubernetes/bin`) to the empty `/opt/cni/bin`, breaking pod networking
+  (NVIDIA/nvidia-container-toolkit#1222). File-mode edits config in place. CDI
+  is also enabled (`cdi.enabled`/`cdi.default`).
+- **PriorityClass ResourceQuota.** GKE gates `system-node-critical`/
+  `system-cluster-critical` behind a ResourceQuota; the stack creates the
+  `gpu-operator` namespace + a permissive quota (100 pods, scoped to those two
+  PriorityClasses) so the operator/NFD pods are admitted.
+- **`wait = true` on the releases.** The single-pool, operator-owned-driver
+  stack converges in ~20 min, so `terraform apply` returns only once the GPU
+  stack is actually ready — no async race to verify by hand. `helm_timeout` is
+  set to `1800` for headroom.
+- **KEDA before the scaler** (`depends_on`).
+
+## GPU quota — your apply fails without it
+
+Fresh projects have a GPU quota of **0** — a global GPU quota plus a
+per-region, per-type quota. The default T4 draws on **`NVIDIA_T4_GPUS`** per
+region, so request an increase in your `region` before applying (**IAM & Admin
+→ Quotas**). Verify:
+
+```bash
+gcloud compute regions describe us-central1 --project my-gcp-project \
+  --format="table(quotas.filter(metric:'NVIDIA_T4_GPUS'))"
+```
+
+## Usage
+
+```bash
+cd infra/terraform/gcp
+
+cp terraform.tfvars.example terraform.tfvars   # set project_id, region, zone
+
+terraform init
+terraform apply
+
+# apply waits ~20 min for the operator to converge, then returns ready (wait=true)
+gcloud container clusters get-credentials keda-gpu-scaler-test --zone us-central1-a --project my-gcp-project
+
+kubectl get nodes -L nvidia.com/gpu.present
+kubectl -n gpu-operator get pods
+kubectl -n keda get pods -o wide
+```
+
+The scaler is reachable in-cluster at the `scaler_grpc_endpoint` output, e.g.
+`keda-gpu-scaler.keda.svc.cluster.local:6000` — that's the `scalerAddress` a
+KEDA `ScaledObject` external trigger should target.
+
+Terraform already installed the e2e fixtures (a `demo-app` Deployment + its
+`ScaledObject`, via the `keda-gpu-scaler-e2e` chart). To exercise scaling, drive
+the GPU and watch the app scale:
+
+```bash
+kubectl apply -f demo/gpu-load.yaml   # gpu-burn Job — pins the T4 for ~150s
+kubectl get deploy demo-app -w        # climbs 1 → 5 under load, back to 1 when idle
+```
+
+## Common overrides
+
+| Variable | Default | Notes |
+|---|---|---|
+| `project_id` / `region` / `zone` | *(required)* | GCP project, region (network) and zone (cluster) — pick one with GPU capacity + your quota. |
+| `gpu_machine_type` | `n1-standard-4` | GPU node machine type. |
+| `gpu_type` | `nvidia-tesla-t4` | Accelerator attached to the GPU node. |
+| `kubernetes_version` | *(required)* | e.g. `1.33` — a version currently offered in your zone/release channel. |
+| `gpu_operator_chart_version` | `v26.3.2` | NVIDIA GPU operator chart. |
+| `keda_chart_version` | `2.20.1` | KEDA chart. |
+
+## Cost & teardown
+
+GCP gives each project one free zonal cluster; beyond that the control plane
+is ~$0.10/hr. You pay for the single GPU node (`n1-standard-4` + T4,
+~$0.55/hr) plus disks — ballpark **~$0.65/hr (~$16/day)** with the defaults.
+**Destroy when done:**
+
+```bash
+terraform destroy   # removes the cluster, node pools, VPC, and everything in it
+# leftovers, if a destroy is ever interrupted:
+gcloud compute instances list --filter="labels.project=keda-gpu-scaler"
+```
+
+> [!WARNING]
+> ## Known bug — `terraform destroy` can hang with `context deadline exceeded`
+>
+> Destroy removes the Helm releases *before* the cluster, and the graceful
+> `helm uninstall` of the **GPU operator** is slow (CRD + validating webhook +
+> operand daemonsets with finalizers; the `gpu-operator` namespace gets stuck
+> `Terminating`). If it exceeds the release `timeout` the destroy errors **and
+> leaves the billing GPU node running** — an easy way to burn money overnight.
+> `helm_timeout` is set generously so a slow-but-completing uninstall finishes;
+> raise it further if needed. If it still hangs, skip the in-cluster uninstall and
+> delete the cluster directly — it takes everything on it with it:
+>
+> ```bash
+> terraform state rm \
+>   helm_release.keda_gpu_scaler helm_release.keda helm_release.gpu_operator \
+>   kubernetes_resource_quota_v1.gpu_operator_critical kubernetes_namespace_v1.gpu_operator
+> terraform destroy   # now deletes only the cluster + VPC — no helm uninstall wait
+> ```
+>
+> Then confirm nothing is still billing: `gcloud container clusters list` and
+> `gcloud compute instances list`.
+
+## How the cluster satisfies the scaler chart
+
+| Chart requirement | Provided by |
+|---|---|
+| `nodeSelector: nvidia.com/gpu.present=true` | GPU-feature-discovery (operator) labels the node |
+| `runtimeClassName: nvidia` | operator's container toolkit creates the `nvidia` RuntimeClass + configures the `nvidia` containerd runtime in place (CNI fix) |
+| working driver + `libnvidia-ml.so` | installed by the NVIDIA GPU operator's driver container |
+| privileged + `nvidia.com/gpu` resource | the operator's device plugin advertises the resource (GKE's is disabled via the node label) |
+
+The operator now owns the driver, toolkit, device plugin, and NFD/GFD labels
+on the single untainted node; only DCGM is disabled.
