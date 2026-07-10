@@ -1,0 +1,5 @@
+apiVersion: v2
+name: keda-gpu-scaler-demo
+description: Demo scale target and ScaledObject for e2e testing keda-gpu-scaler
+type: application
+version: 0.1.0

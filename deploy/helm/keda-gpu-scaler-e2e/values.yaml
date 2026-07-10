@@ -1,0 +1,11 @@
+# In-cluster gRPC address of the keda-gpu-scaler service.
+# Overridden by Terraform from its variables.
+scalerAddress: "keda-gpu-scaler.keda.svc.cluster.local:6000"
+
+# Scale toward keeping GPU utilization around this % (aggregated across GPUs).
+targetGpuUtilization: "30"
+activationThreshold: "5"
+aggregation: "max"
+
+minReplicaCount: 1
+maxReplicaCount: 5

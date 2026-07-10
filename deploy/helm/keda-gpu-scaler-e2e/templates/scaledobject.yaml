@@ -10,8 +10,8 @@ metadata:
 spec:
   scaleTargetRef:
     name: demo-app
-  minReplicaCount: 1
-  maxReplicaCount: 5
+  minReplicaCount: {{ .Values.minReplicaCount }}
+  maxReplicaCount: {{ .Values.maxReplicaCount }}
   pollingInterval: 15 # how often KEDA asks the scaler (seconds)
   cooldownPeriod: 30 # wait before scaling back down (seconds)
   triggers:
@@ -19,9 +19,9 @@ spec:
       metadata:
         # In-cluster address of the scaler's gRPC service (release name +
         # namespace). Matches `helm install keda-gpu-scaler -n keda`.
-        scalerAddress: "keda-gpu-scaler.keda.svc.cluster.local:6000"
+        scalerAddress: {{ .Values.scalerAddress | quote }}
         # Scale toward keeping GPU utilization around this %, aggregated across
         # all GPUs (max). Low on purpose so the demo reacts quickly.
-        targetGpuUtilization: "30"
-        activationThreshold: "5"
-        aggregation: "max"
+        targetGpuUtilization: {{ .Values.targetGpuUtilization | quote }}
+        activationThreshold: {{ .Values.activationThreshold | quote }}
+        aggregation: {{ .Values.aggregation | quote }}
