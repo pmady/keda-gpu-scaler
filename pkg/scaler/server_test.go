@@ -428,6 +428,147 @@ func TestAggregateEmpty(t *testing.T) {
 	}
 }
 
+// TestGetMetricValue exercises getMetricValue across single/multi GPU, all
+// aggregation modes, mixed MIG/non-MIG devices, and the error edge cases.
+// Invalid metricType strings are validated in parseMetadata (see
+// TestParseMetadata), so the error paths here are empty-device-list and
+// out-of-range gpuIndex.
+func TestGetMetricValue(t *testing.T) {
+	// A single-device slice reused by the single-GPU aggregation cases: with only
+	// one value, every aggregation mode must return that same value.
+	oneDevice := []gpu.Metrics{
+		{Index: 0, UUID: "GPU-solo", Name: "A100", GPUUtilization: 42, MemoryUsedMiB: 1024, MemoryTotalMiB: 81920},
+	}
+
+	// Mixed MIG + non-MIG devices: non-MIG util 60, MIG util 20 -> avg 40, sum 80.
+	mixedDevices := []gpu.Metrics{
+		{Index: 0, Name: "A100", GPUUtilization: 60},
+		{Index: 1, Name: "MIG 3g.40gb", IsMIGInstance: true, ParentIndex: 0, MigProfile: "3g.40gb", GPUUtilization: 20},
+	}
+
+	tests := []struct {
+		name    string
+		devices []gpu.Metrics
+		cfg     scalerConfig
+		want    float64
+		wantErr bool
+	}{
+		{
+			name:    "single GPU avg returns that value",
+			devices: oneDevice,
+			cfg:     scalerConfig{metricType: profiles.MetricGPUUtilization, gpuIndex: -1, aggregation: "avg"},
+			want:    42,
+		},
+		{
+			name:    "single GPU max returns that value",
+			devices: oneDevice,
+			cfg:     scalerConfig{metricType: profiles.MetricGPUUtilization, gpuIndex: -1, aggregation: "max"},
+			want:    42,
+		},
+		{
+			name:    "single GPU min returns that value",
+			devices: oneDevice,
+			cfg:     scalerConfig{metricType: profiles.MetricGPUUtilization, gpuIndex: -1, aggregation: "min"},
+			want:    42,
+		},
+		{
+			name:    "single GPU sum returns that value",
+			devices: oneDevice,
+			cfg:     scalerConfig{metricType: profiles.MetricGPUUtilization, gpuIndex: -1, aggregation: "sum"},
+			want:    42,
+		},
+		{
+			name:    "multi GPU max",
+			devices: testDevices,
+			cfg:     scalerConfig{metricType: profiles.MetricGPUUtilization, gpuIndex: -1, aggregation: "max"},
+			want:    80, // max(80, 30)
+		},
+		{
+			name:    "multi GPU min",
+			devices: testDevices,
+			cfg:     scalerConfig{metricType: profiles.MetricGPUUtilization, gpuIndex: -1, aggregation: "min"},
+			want:    30, // min(80, 30)
+		},
+		{
+			name:    "multi GPU avg",
+			devices: testDevices,
+			cfg:     scalerConfig{metricType: profiles.MetricGPUUtilization, gpuIndex: -1, aggregation: "avg"},
+			want:    55, // (80+30)/2
+		},
+		{
+			name:    "multi GPU sum",
+			devices: testDevices,
+			cfg:     scalerConfig{metricType: profiles.MetricGPUUtilization, gpuIndex: -1, aggregation: "sum"},
+			want:    110, // 80+30
+		},
+		{
+			// "count" is not a supported aggregation mode; aggregate() falls
+			// through to its default branch, which returns the first device's
+			// value (in collector order), i.e. device 0's GPUUtilization=80.
+			name:    "unknown aggregation mode falls through to first value",
+			devices: testDevices,
+			cfg:     scalerConfig{metricType: profiles.MetricGPUUtilization, gpuIndex: -1, aggregation: "count"},
+			want:    80,
+		},
+		{
+			name:    "empty device list errors",
+			devices: []gpu.Metrics{},
+			cfg:     scalerConfig{metricType: profiles.MetricGPUUtilization, gpuIndex: -1, aggregation: "max"},
+			wantErr: true, // "no GPU devices found"
+		},
+		{
+			name:    "out-of-range gpuIndex errors",
+			devices: testDevices,
+			cfg:     scalerConfig{metricType: profiles.MetricGPUUtilization, gpuIndex: 99, aggregation: "max"},
+			wantErr: true, // mock collector CollectDevice error for index 99
+		},
+		{
+			// Aggregation is intentionally "sum" but must be IGNORED for a single
+			// indexed device: the result is device 1's raw GPUUtilization=30.
+			name:    "indexed device ignores aggregation",
+			devices: testDevices,
+			cfg:     scalerConfig{metricType: profiles.MetricGPUUtilization, gpuIndex: 1, aggregation: "sum"},
+			want:    30,
+		},
+		{
+			name:    "mixed MIG and non-MIG avg",
+			devices: mixedDevices,
+			cfg:     scalerConfig{metricType: profiles.MetricGPUUtilization, gpuIndex: -1, aggregation: "avg"},
+			want:    40, // (60+20)/2
+		},
+		{
+			name:    "mixed MIG and non-MIG sum",
+			devices: mixedDevices,
+			cfg:     scalerConfig{metricType: profiles.MetricGPUUtilization, gpuIndex: -1, aggregation: "sum"},
+			want:    80, // 60+20
+		},
+		{
+			// Different metric type proves metricType selection is independent of
+			// GPUUtilization: MemoryUsedMiB max(40960, 16384) = 40960.
+			name:    "multi GPU memory_used_mib max",
+			devices: testDevices,
+			cfg:     scalerConfig{metricType: profiles.MetricMemoryUsedMiB, gpuIndex: -1, aggregation: "max"},
+			want:    40960,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := newTestScaler(tt.devices)
+			got, err := s.getMetricValue(tt.cfg)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("getMetricValue() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr {
+				return
+			}
+			if got != tt.want {
+				t.Errorf("getMetricValue() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 // MetricType alias for the test that uses a raw string
 type MetricType = profiles.MetricType
 
