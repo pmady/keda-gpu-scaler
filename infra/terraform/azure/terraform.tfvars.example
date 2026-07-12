@@ -11,7 +11,7 @@ resource_group_name = "keda-gpu-scaler-test-rg"
 kubernetes_version  = "1.33"
 gpu_vm_size    = "Standard_NC4as_T4_v3"
 gpu_node_count = 1
-helm_timeout   = 900
+helm_timeout   = 1800
 
 gpu_operator_chart_version = "v26.3.2"
 keda_chart_version         = "2.20.1"
@@ -22,4 +22,3 @@ scaler_image_tag        = "v0.5.0"
 tags = {
   Project = "keda-gpu-scaler"
 }
-

@@ -1,9 +1,9 @@
 region             = "us-east-2"
 cluster_name       = "keda-gpu-scaler-test"
-kubernetes_version = "1.35"
+kubernetes_version = "1.33"
 gpu_instance_type  = "g5.xlarge"
 gpu_node_count     = 1
-helm_timeout       = 600
+helm_timeout       = 1800
 
 gpu_operator_chart_version = "v26.3.2"
 keda_chart_version         = "2.20.1"
