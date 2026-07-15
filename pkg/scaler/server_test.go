@@ -150,6 +150,36 @@ func TestParseMetadata(t *testing.T) {
 			},
 		},
 		{
+			name: "p95 aggregation",
+			metadata: map[string]string{
+				"aggregation": "p95",
+			},
+			want: scalerConfig{
+				metricName:          "keda_gpu_metric",
+				metricType:          profiles.MetricGPUUtilization,
+				targetValue:         80,
+				activationThreshold: 0,
+				gpuIndex:            -1,
+				aggregation:         "p95",
+				pollIntervalSeconds: 10,
+			},
+		},
+		{
+			name: "p99 aggregation",
+			metadata: map[string]string{
+				"aggregation": "p99",
+			},
+			want: scalerConfig{
+				metricName:          "keda_gpu_metric",
+				metricType:          profiles.MetricGPUUtilization,
+				targetValue:         80,
+				activationThreshold: 0,
+				gpuIndex:            -1,
+				aggregation:         "p99",
+				pollIntervalSeconds: 10,
+			},
+		},
+		{
 			name: "unknown profile",
 			metadata: map[string]string{
 				"profile": "nonexistent",
@@ -408,6 +438,8 @@ func TestAggregate(t *testing.T) {
 		{"min", "min", 10},
 		{"avg", "avg", 30},
 		{"sum", "sum", 150},
+		{"p95", "p95", 50},
+		{"p99", "p99", 50},
 		{"unknown defaults to first", "unknown", 10},
 	}
 
@@ -426,6 +458,64 @@ func TestAggregateEmpty(t *testing.T) {
 	if got != 0 {
 		t.Errorf("aggregate(empty) = %v, want 0", got)
 	}
+}
+
+func TestAggregatePercentiles(t *testing.T) {
+	tests := []struct {
+		name   string
+		values []float64
+		method string
+		want   float64
+	}{
+		// A single hot GPU should not be able to dominate p95/p99 any more
+		// than it would any other sample, but with N=1 there is only one
+		// possible answer: the single value itself.
+		{"1 GPU p95", []float64{42}, "p95", 42},
+		{"1 GPU p99", []float64{42}, "p99", 42},
+
+		// N=2: nearest-rank percentile picks the higher of the two values.
+		{"2 GPUs p95", []float64{10, 90}, "p95", 90},
+		{"2 GPUs p99", []float64{10, 90}, "p99", 90},
+
+		// N=5: one hot GPU (90) among four idle GPUs. With this few samples
+		// nearest-rank p95/p99 still resolve to the max.
+		{"5 GPUs p95 unsorted input", []float64{20, 90, 10, 40, 30}, "p95", 90},
+		{"5 GPUs p99 unsorted input", []float64{20, 90, 10, 40, 30}, "p99", 90},
+
+		// N=20: with enough samples, p95 and p99 diverge from max and from
+		// each other, which is the point of adding percentile aggregation.
+		{"20 GPUs p95", gpuValues20, "p95", 19},
+		{"20 GPUs p99", gpuValues20, "p99", 20},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := aggregate(tt.values, tt.method)
+			if got != tt.want {
+				t.Errorf("aggregate(%v, %q) = %v, want %v", tt.values, tt.method, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAggregatePercentileDoesNotMutateInput(t *testing.T) {
+	values := []float64{50, 10, 40, 20, 30}
+	original := append([]float64(nil), values...)
+
+	aggregate(values, "p95")
+
+	for i := range values {
+		if values[i] != original[i] {
+			t.Errorf("aggregate mutated input slice: got %v, want %v", values, original)
+		}
+	}
+}
+
+// gpuValues20 simulates a 20-GPU node where GPU utilization values are
+// 1..20, so sorting is easy to reason about by hand.
+var gpuValues20 = []float64{
+	1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+	11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
 }
 
 // TestGetMetricValue exercises getMetricValue across single/multi GPU, all
@@ -712,6 +802,16 @@ func TestGetMetrics(t *testing.T) {
 			name:     "min GPU util",
 			metadata: map[string]string{"aggregation": "min"},
 			want:     30,
+		},
+		{
+			name:     "p95 GPU util",
+			metadata: map[string]string{"aggregation": "p95"},
+			want:     80, // nearest-rank percentile of [30, 80] is 80
+		},
+		{
+			name:     "p99 GPU util",
+			metadata: map[string]string{"aggregation": "p99"},
+			want:     80, // nearest-rank percentile of [30, 80] is 80
 		},
 		{
 			name:     "single GPU memory percent",

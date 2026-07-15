@@ -175,7 +175,7 @@ triggers:
       targetValue: "85"
       activationThreshold: "10"
       gpuIndex: "0"              # specific GPU index, or omit for all
-      aggregation: "max"         # max, min, avg, sum across GPUs
+      aggregation: "max"         # max, min, avg, sum, p95, p99 across GPUs
 ```
 
 See `deploy/examples/` for ready-to-use ScaledObject manifests.
@@ -193,7 +193,7 @@ See `deploy/examples/` for ready-to-use ScaledObject manifests.
 | `targetMemoryUtilization` | Shorthand for VRAM utilization target | (none) |
 | `activationThreshold` | Value below which scale-to-zero activates | `0` |
 | `gpuIndex` | Specific GPU index to monitor. Must be `-1` (all GPUs) or `>= 0`; other negative values are rejected | `-1` (all GPUs) |
-| `aggregation` | Multi-GPU aggregation: `max`, `min`, `avg`, `sum` | `max` |
+| `aggregation` | Multi-GPU aggregation: `max`, `min`, `avg`, `sum`, `p95`, `p99` | `max` |
 | `pollIntervalSeconds` | Metric polling interval | `10` |
 
 ---
