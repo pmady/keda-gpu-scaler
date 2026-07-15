@@ -345,6 +345,8 @@ srun --gres=gpu:2 gpu-metrics --format json
 flux run -N1 -g2 gpu-metrics --format json
 ```
 
+Or let Flux start and stop collection automatically for the lifetime of a job via the [`gpu-monitor` shell plugin drop-in](deploy/flux/gpu-monitor.lua): `flux run -o gpu-monitor -N2 -g1 ./train.sh`.
+
 See **[HPC & Cross-Environment Metrics](docs/hpc.md)** for full usage, and **[Cross-Environment Comparison Guide](docs/cross-env-comparison.md)** for comparing on-prem vs cloud GPU runs.
 
 Or build the Docker image directly:

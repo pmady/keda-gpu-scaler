@@ -22,6 +22,8 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -196,5 +198,86 @@ func TestOutputCSVDriverVersion(t *testing.T) {
 	}
 	if !strings.Contains(out, "535.104.05") {
 		t.Errorf("CSV row missing driver version value\n--- output ---\n%s", out)
+	}
+}
+
+// countingCollector wraps a MockCollector and counts CollectAll calls, so
+// tests can assert that no further collection happens after shutdown.
+type countingCollector struct {
+	*gpu.MockCollector
+	calls int32
+}
+
+func (c *countingCollector) CollectAll() ([]gpu.Metrics, error) {
+	atomic.AddInt32(&c.calls, 1)
+	return c.MockCollector.CollectAll()
+}
+
+// runContinuous is exercised as gpu-metrics's Flux coprocess code path (see
+// docs/hpc.md and deploy/flux/gpu-monitor.lua): Flux sends SIGTERM to the
+// coprocess as soon as the job's tasks complete, and escalates to SIGKILL
+// after a timeout if it hasn't exited by then. These tests validate that
+// gpu-metrics does not need to be SIGKILLed — it exits promptly and cleanly
+// on SIGTERM (issue #60).
+func TestRunContinuousExitsCleanlyOnSIGTERM(t *testing.T) {
+	collector := gpu.NewMockCollector([]gpu.Metrics{{Index: 0, Name: "A100"}})
+	sigCh := make(chan os.Signal, 1)
+	envCtx := env.Context{Orchestrator: "flux", JobID: "f23r45t"}
+
+	done := make(chan struct{})
+	var out string
+	go func() {
+		out = captureStdout(t, func() {
+			runContinuous(collector, envCtx, "json", "", 5*time.Millisecond, sigCh)
+		})
+		close(done)
+	}()
+
+	// Let it collect at least once, then simulate Flux delivering SIGTERM to
+	// the coprocess when the job's tasks complete.
+	time.Sleep(20 * time.Millisecond)
+	sigCh <- syscall.SIGTERM
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("runContinuous did not return within 1s of SIGTERM; shutdown is not clean")
+	}
+
+	// Output is pretty-printed (enc.SetIndent("", "  ")), so keys are
+	// rendered as `"key": "value"` with a space after the colon.
+	if !strings.Contains(out, `"orchestrator": "flux"`) {
+		t.Errorf("expected at least one JSON sample before shutdown, got: %s", out)
+	}
+}
+
+func TestRunContinuousStopsCollectingAfterSIGTERM(t *testing.T) {
+	collector := &countingCollector{MockCollector: gpu.NewMockCollector([]gpu.Metrics{{Index: 0}})}
+	sigCh := make(chan os.Signal, 1)
+	envCtx := env.Context{Orchestrator: "flux", JobID: "f23r45t"}
+
+	done := make(chan struct{})
+	go func() {
+		captureStdout(t, func() {
+			runContinuous(collector, envCtx, "json", "", 5*time.Millisecond, sigCh)
+		})
+		close(done)
+	}()
+
+	time.Sleep(20 * time.Millisecond)
+	sigCh <- syscall.SIGTERM
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("runContinuous did not return within 1s of SIGTERM")
+	}
+
+	callsAtShutdown := atomic.LoadInt32(&collector.calls)
+	// Long enough for a leaked ticker/goroutine to fire again if the ticker
+	// wasn't stopped and the loop didn't actually return.
+	time.Sleep(30 * time.Millisecond)
+	if got := atomic.LoadInt32(&collector.calls); got != callsAtShutdown {
+		t.Errorf("collector was polled %d more time(s) after SIGTERM; ticker/goroutine not stopped cleanly", got-callsAtShutdown)
 	}
 }

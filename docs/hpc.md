@@ -132,7 +132,7 @@ gpu-metrics --format json > gpu-metrics-$SLURM_JOB_ID.json
 
 [Flux](https://flux-framework.org/) is a next-generation workload manager developed at Lawrence Livermore National Laboratory. When `FLUX_JOB_ID` is set, `gpu-metrics` reads the GPUs from `CUDA_VISIBLE_DEVICES`, which Flux sets automatically when GPU affinity is active.
 
-### Usage
+### One-shot / ad hoc usage
 
 ```bash
 # One-shot table — only shows GPUs allocated to this task
@@ -141,12 +141,34 @@ flux run -N1 -g1 gpu-metrics
 # JSON with Flux context
 flux run -N1 -g2 gpu-metrics --format json
 
-# Continuous collection every 5 seconds
-flux run -N1 -g4 gpu-metrics --interval 5s --format json
-
 # Multi-node: each task collects its own assigned GPUs
 flux run -N4 -g2 --tasks-per-node=1 gpu-metrics --format json
 ```
+
+### Automatic collection via Flux shell plugin (recommended)
+
+Running `gpu-metrics --interval ...` as its own side-by-side `flux run` command alongside the real job works, but it's manual: you have to remember to launch it, keep the interval in sync, and clean it up yourself. As of the release containing [flux-framework/flux-core#7723](https://github.com/flux-framework/flux-core/pull/7723), Flux ships a generic builtin `coprocess` shell plugin that starts and stops a helper process automatically for the lifetime of a job. keda-gpu-scaler provides a ready-made drop-in for it: [`deploy/flux/gpu-monitor.lua`](../deploy/flux/gpu-monitor.lua).
+
+Install it once per site (or per user, in a personal shell initrc directory):
+
+```bash
+cp deploy/flux/gpu-monitor.lua /etc/flux/shell/lua.d/gpu-monitor.lua
+```
+
+Then enable it per job with `-o gpu-monitor`:
+
+```bash
+flux run -o gpu-monitor -N2 -g1 ./train.sh
+```
+
+`gpu-metrics --interval 5s --format json` now starts on every shell rank the moment the job starts, and is stopped (SIGTERM, escalating to SIGKILL after a configurable timeout if it doesn't exit) the moment the job's tasks complete — no separate `flux run` command, and no risk of the collector outliving or lagging the job it's watching. Output is aggregated to `gpu-metrics-<jobid>.jsonl` by default; override the destination (or any other field) with the usual scalar-or-object shell option convention:
+
+```bash
+# Per-node output file instead of one aggregated file
+flux run -o gpu-monitor.output=/tmp/gpu-{{node.id}}.jsonl -N2 -g1 ./train.sh
+```
+
+See the comments in `gpu-monitor.lua` for the full option schema, and `flux-shell-options(7)` / `flux-shell-initrc(5)` in flux-core for how `coprocess.define()` works.
 
 ### JSON output
 

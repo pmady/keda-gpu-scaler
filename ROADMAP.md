@@ -21,6 +21,7 @@ Technical direction for keda-gpu-scaler. Updated as priorities shift.
 ## Next (v0.6.0 — August 2026)
 
 - ✅ **MIG support** — Per-instance metrics for Multi-Instance GPU partitions. `CollectAll` enumerates MIG compute instances automatically; HPC environments resolve MIG UUIDs via `CollectByUUID`. ([#26](https://github.com/pmady/keda-gpu-scaler/issues/26))
+- ✅ **Flux shell plugin for automatic GPU metrics collection** — `deploy/flux/gpu-monitor.lua` drop-in for flux-core's builtin `coprocess` shell plugin starts/stops `gpu-metrics` automatically for the lifetime of a job, replacing the manual side-by-side `flux run` pattern. ([#60](https://github.com/pmady/keda-gpu-scaler/issues/60))
 - **New scaling profiles** — TGI, Ollama ([#64](https://github.com/pmady/keda-gpu-scaler/issues/64), [#65](https://github.com/pmady/keda-gpu-scaler/issues/65))
 - ✅ **vLLM queue depth** — Scale on pending requests via vLLM engine API. `pkg/vllm` scrapes `vllm:num_requests_waiting` (and `vllm:gpu_cache_usage_perc`) from the engine's `/metrics` endpoint; new `vllm_queue_depth` / `vllm_kv_cache_usage` metric types and the `vllm-queue-depth` profile expose it to KEDA. ([#28](https://github.com/pmady/keda-gpu-scaler/issues/28))
 - **Improved aggregation** — p95, p99 percentile methods ([#69](https://github.com/pmady/keda-gpu-scaler/issues/69))
