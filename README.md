@@ -84,6 +84,7 @@ Instead of configuring raw metric thresholds, use a profile optimized for your w
 | `training` | GPU Util | 90 | 0 | Training jobs (no scale-to-zero) |
 | `batch` | Memory % | 70 | 1 | Batch inference with aggressive scale-down |
 | `ollama` | Memory % | 70 | 3 | Ollama LLM serving with scale-to-zero |
+| `tgi-inference` | Memory % | 75 | 5 | HuggingFace TGI serving with scale-to-zero |
 | `distributed-training` | NVLink TX | 50000 | 5000 | Data-parallel training on NVLink systems |
 
 ---

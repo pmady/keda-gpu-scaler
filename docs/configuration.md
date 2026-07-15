@@ -49,6 +49,7 @@ Profiles bundle defaults for common workloads. Override any parameter in the tri
 | `training` | GPU Util | 90 | 0 | Training jobs (no scale-to-zero) |
 | `batch` | Memory % | 70 | 1 | Batch inference with aggressive scale-down |
 | `ollama` | Memory % | 70 | 3 | Ollama LLM serving with scale-to-zero |
+| `tgi-inference` | Memory % | 75 | 5 | HuggingFace TGI serving with scale-to-zero |
 | `distributed-training` | NVLink TX MB/s | 800 | 100 | Data-parallel training on NVLink systems |
 
 ### Using a profile

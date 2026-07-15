@@ -1,0 +1,25 @@
+# Example: ScaledObject for a HuggingFace Text Generation Inference (TGI)
+# deployment using the pre-built tgi-inference profile.
+#
+# Prerequisites:
+#   - keda-gpu-scaler DaemonSet running (kubectl apply -f deploy/manifests.yaml)
+#   - KEDA v2.10+ installed
+#   - A Deployment named "tgi-deployment" in the "ai-workloads" namespace
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: tgi-inference-scaler
+  namespace: ai-workloads
+spec:
+  scaleTargetRef:
+    name: tgi-deployment
+  minReplicaCount: 0
+  maxReplicaCount: 50
+  cooldownPeriod: 45
+  triggers:
+    - type: external
+      metadata:
+        # Points to the Service created by deploy/manifests.yaml
+        scalerAddress: "keda-gpu-scaler.keda.svc.cluster.local:6000"
+        # Use the pre-built HuggingFace TGI profile
+        profile: "tgi-inference"

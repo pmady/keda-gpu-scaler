@@ -165,6 +165,17 @@ var builtinProfiles = map[string]Profile{
 		ScaleUpStabilize:   10,
 		ScaleDownStabilize: 120,
 	},
+	"tgi-inference": {
+		Name:               "tgi-inference",
+		MetricName:         "keda_gpu_tgi_inference",
+		Description:        "HuggingFace TGI serving — memory-based, supports scale-to-zero",
+		TargetValue:        75,
+		ActivationValue:    5,
+		MetricType:         MetricMemoryUsedPercent,
+		CooldownSeconds:    45,
+		ScaleUpStabilize:   15,
+		ScaleDownStabilize: 90,
+	},
 }
 
 // Get returns a profile by name.

@@ -142,6 +142,14 @@ func TestIsActive(t *testing.T) {
 			wantActive: true, // memory_used_percent = 73.2%, activationValue=5
 		},
 		{
+			name: "active with tgi-inference profile above threshold",
+			devices: []gpu.Metrics{
+				{Index: 0, GPUUtilization: 80, MemoryUsedMiB: 6000, MemoryTotalMiB: 8192},
+			},
+			metadata:   map[string]string{"profile": "tgi-inference"},
+			wantActive: true, // memory_used_percent = 73.2%, activationValue=5
+		},
+		{
 			name: "multi-GPU max aggregation",
 			devices: []gpu.Metrics{
 				{Index: 0, GPUUtilization: 5, MemoryUsedMiB: 100, MemoryTotalMiB: 8192},
@@ -208,6 +216,12 @@ func TestGetMetricSpec(t *testing.T) {
 			metadata:       map[string]string{"profile": "vllm-inference"},
 			wantMetricName: "keda_gpu_vllm_inference",
 			wantTarget:     80,
+		},
+		{
+			name:           "tgi-inference profile",
+			metadata:       map[string]string{"profile": "tgi-inference"},
+			wantMetricName: "keda_gpu_tgi_inference",
+			wantTarget:     75,
 		},
 		{
 			name:           "custom target value",
@@ -445,7 +459,7 @@ func TestAllProfiles(t *testing.T) {
 		},
 	}
 
-	profileNames := []string{"vllm-inference", "triton-inference", "training", "batch"}
+	profileNames := []string{"vllm-inference", "triton-inference", "training", "batch", "ollama", "tgi-inference"}
 
 	addr, cleanup := startTestServer(t, devices)
 	defer cleanup()
