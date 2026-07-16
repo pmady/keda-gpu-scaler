@@ -904,7 +904,7 @@ func TestExtractMetricPCIeNVLink(t *testing.T) {
 func TestDistributedTrainingProfile(t *testing.T) {
 	s := newTestScaler(testDevices)
 
-	// distributed-training profile should scale on NVLink TX, target 800 MB/s
+	// distributed-training profile should scale on NVLink TX, target 50000 MB/s
 	resp, err := s.GetMetricSpec(context.Background(), &pb.ScaledObjectRef{
 		Name:           "test-so",
 		ScalerMetadata: map[string]string{"profile": "distributed-training"},
@@ -912,11 +912,11 @@ func TestDistributedTrainingProfile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetMetricSpec() error = %v", err)
 	}
-	if resp.MetricSpecs[0].TargetSizeFloat != 800 {
-		t.Errorf("target = %v, want 800", resp.MetricSpecs[0].TargetSizeFloat)
+	if resp.MetricSpecs[0].TargetSizeFloat != 50000 {
+		t.Errorf("target = %v, want 50000", resp.MetricSpecs[0].TargetSizeFloat)
 	}
 
-	// IsActive should be true when NVLink TX (max=600) > activationThreshold (100)
+	// IsActive should be false when NVLink TX (max=600) < activationThreshold (5000)
 	active, err := s.IsActive(context.Background(), &pb.ScaledObjectRef{
 		Name:           "test-so",
 		ScalerMetadata: map[string]string{"profile": "distributed-training"},
@@ -924,8 +924,8 @@ func TestDistributedTrainingProfile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("IsActive() error = %v", err)
 	}
-	if !active.Result {
-		t.Error("IsActive() = false, want true (NVLink TX 600 > activation 100)")
+	if active.Result {
+		t.Error("IsActive() = true, want false (NVLink TX 600 < activation 5000)")
 	}
 }
 
@@ -1383,5 +1383,32 @@ func TestGetMetricsVLLMScrapeError(t *testing.T) {
 	})
 	if err == nil {
 		t.Error("GetMetrics() with an unreachable vLLM endpoint should return an error")
+	}
+}
+
+func TestValidateVLLMEndpoint(t *testing.T) {
+	tests := []struct {
+		name    string
+		url     string
+		wantErr bool
+	}{
+		{name: "valid http URL", url: "http://vllm.default:8000/metrics", wantErr: false},
+		{name: "valid https URL", url: "https://vllm.default:8000/metrics", wantErr: false},
+		{name: "valid IP URL", url: "http://10.0.1.5:8000/metrics", wantErr: false},
+		{name: "localhost allowed", url: "http://127.0.0.1:8000/metrics", wantErr: false},
+		{name: "cloud metadata IP blocked", url: "http://169.254.169.254/latest/meta-data", wantErr: true},
+		{name: "link-local IP blocked", url: "http://169.254.1.1/foo", wantErr: true},
+		{name: "metadata.google.internal blocked", url: "http://metadata.google.internal/computeMetadata/v1", wantErr: true},
+		{name: "metadata.goog blocked", url: "http://metadata.goog/computeMetadata/v1", wantErr: true},
+		{name: "unsupported scheme", url: "ftp://vllm:8000/metrics", wantErr: true},
+		{name: "missing hostname", url: "http:///metrics", wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateVLLMEndpoint(tt.url)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validateVLLMEndpoint(%q) error = %v, wantErr %v", tt.url, err, tt.wantErr)
+			}
+		})
 	}
 }
