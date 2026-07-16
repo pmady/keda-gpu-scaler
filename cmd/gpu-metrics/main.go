@@ -103,7 +103,23 @@ func main() {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
-	ticker := time.NewTicker(*interval)
+	runContinuous(collector, envCtx, *format, collector.DriverVersion(), *interval, sigCh)
+}
+
+// runContinuous polls the collector every interval and prints a sample each
+// time, until it receives a signal on sigCh, at which point it returns
+// immediately without collecting again.
+//
+// This is the code path exercised when gpu-metrics runs as a Flux job shell
+// coprocess (see docs/hpc.md and deploy/flux/gpu-monitor.lua): Flux sends
+// SIGTERM to the coprocess as soon as the job's tasks complete and escalates
+// to SIGKILL after a configurable timeout if it hasn't exited by then. To
+// avoid relying on SIGKILL — which would drop any output still buffered by
+// the shell's output aggregation — shutdown here must be prompt and must
+// stop the ticker so no goroutine keeps polling NVML after the job has
+// ended.
+func runContinuous(collector gpu.MetricsCollector, envCtx env.Context, format string, driverVersion string, interval time.Duration, sigCh <-chan os.Signal) {
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for {
@@ -111,7 +127,7 @@ func main() {
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "collection failed: %v\n", err)
 		} else {
-			output(metrics, *format, envCtx, collector.DriverVersion())
+			output(metrics, format, envCtx, driverVersion)
 		}
 
 		select {

@@ -19,8 +19,10 @@ package scaler
 import (
 	"context"
 	"fmt"
+	"math"
 	"net"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -215,10 +217,10 @@ func parseMetadata(metadata map[string]string) (scalerConfig, error) {
 	}
 	if v, ok := metadata["aggregation"]; ok {
 		switch v {
-		case "max", "min", "avg", "sum":
+		case "max", "min", "avg", "sum", "p95", "p99":
 			cfg.aggregation = v
 		default:
-			return cfg, fmt.Errorf("invalid aggregation %q: must be max, min, avg, or sum", v)
+			return cfg, fmt.Errorf("invalid aggregation %q: must be max, min, avg, sum, p95, or p99", v)
 		}
 	}
 	if v, ok := metadata["pollIntervalSeconds"]; ok {
@@ -392,9 +394,32 @@ func aggregate(values []float64, method string) float64 {
 			sum += v
 		}
 		return sum
+	case "p95":
+		return percentile(values, 0.95)
+	case "p99":
+		return percentile(values, 0.99)
 	default:
 		return values[0]
 	}
+}
+
+// percentile returns the value at the given percentile p (0-1] using the
+// nearest-rank method: values are sorted ascending and the element at the
+// computed rank is returned. This lets a single hot GPU be treated as an
+// outlier instead of dominating the result the way max does.
+func percentile(values []float64, p float64) float64 {
+	sorted := make([]float64, len(values))
+	copy(sorted, values)
+	sort.Float64s(sorted)
+
+	idx := int(math.Ceil(p*float64(len(sorted)))) - 1
+	if idx < 0 {
+		idx = 0
+	}
+	if idx >= len(sorted) {
+		idx = len(sorted) - 1
+	}
+	return sorted[idx]
 }
 
 // validateVLLMEndpoint blocks cloud metadata endpoints that could leak credentials.

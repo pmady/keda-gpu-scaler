@@ -84,6 +84,7 @@ Instead of configuring raw metric thresholds, use a profile optimized for your w
 | `training` | GPU Util | 90 | 0 | Training jobs (no scale-to-zero) |
 | `batch` | Memory % | 70 | 1 | Batch inference with aggressive scale-down |
 | `ollama` | Memory % | 70 | 3 | Ollama LLM serving with scale-to-zero |
+| `tgi-inference` | Memory % | 75 | 5 | HuggingFace TGI serving with scale-to-zero |
 | `distributed-training` | NVLink TX | 50000 | 5000 | Data-parallel training on NVLink systems |
 
 ---
@@ -175,7 +176,7 @@ triggers:
       targetValue: "85"
       activationThreshold: "10"
       gpuIndex: "0"              # specific GPU index, or omit for all
-      aggregation: "max"         # max, min, avg, sum across GPUs
+      aggregation: "max"         # max, min, avg, sum, p95, p99 across GPUs
 ```
 
 See `deploy/examples/` for ready-to-use ScaledObject manifests.
@@ -193,7 +194,7 @@ See `deploy/examples/` for ready-to-use ScaledObject manifests.
 | `targetMemoryUtilization` | Shorthand for VRAM utilization target | (none) |
 | `activationThreshold` | Value below which scale-to-zero activates | `0` |
 | `gpuIndex` | Specific GPU index to monitor. Must be `-1` (all GPUs) or `>= 0`; other negative values are rejected | `-1` (all GPUs) |
-| `aggregation` | Multi-GPU aggregation: `max`, `min`, `avg`, `sum` | `max` |
+| `aggregation` | Multi-GPU aggregation: `max`, `min`, `avg`, `sum`, `p95`, `p99` | `max` |
 | `pollIntervalSeconds` | Metric polling interval | `10` |
 
 ---
@@ -344,6 +345,8 @@ srun --gres=gpu:2 gpu-metrics --format json
 ```bash
 flux run -N1 -g2 gpu-metrics --format json
 ```
+
+Or let Flux start and stop collection automatically for the lifetime of a job via the [`gpu-monitor` shell plugin drop-in](deploy/flux/gpu-monitor.lua): `flux run -o gpu-monitor -N2 -g1 ./train.sh`.
 
 See **[HPC & Cross-Environment Metrics](docs/hpc.md)** for full usage, and **[Cross-Environment Comparison Guide](docs/cross-env-comparison.md)** for comparing on-prem vs cloud GPU runs.
 

@@ -71,6 +71,13 @@ func TestGetBuiltinProfiles(t *testing.T) {
 			wantTarget: 70,
 		},
 		{
+			name:       "tgi-inference exists",
+			profile:    "tgi-inference",
+			wantFound:  true,
+			wantMetric: MetricMemoryUsedPercent,
+			wantTarget: 75,
+		},
+		{
 			name:      "unknown profile not found",
 			profile:   "nonexistent",
 			wantFound: false,
@@ -105,8 +112,8 @@ func TestGetBuiltinProfiles(t *testing.T) {
 
 func TestList(t *testing.T) {
 	names := List()
-	if len(names) != 7 {
-		t.Errorf("List() returned %d profiles, want 7", len(names))
+	if len(names) != 8 {
+		t.Errorf("List() returned %d profiles, want 8", len(names))
 	}
 
 	expected := map[string]bool{
@@ -117,6 +124,7 @@ func TestList(t *testing.T) {
 		"batch":                false,
 		"distributed-training": false,
 		"ollama":               false,
+		"tgi-inference":        false,
 	}
 	for _, name := range names {
 		if _, ok := expected[name]; !ok {

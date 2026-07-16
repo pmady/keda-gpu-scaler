@@ -13,7 +13,7 @@ Everything goes in the ScaledObject trigger `metadata`. No config files or extra
 | `targetMemoryUtilization` | Shorthand for VRAM utilization target | (none) |
 | `activationThreshold` | Value below which scale-to-zero activates | `0` |
 | `gpuIndex` | Specific GPU index to monitor. Must be `-1` (all GPUs) or `>= 0`; other negative values are rejected | `-1` (all GPUs) |
-| `aggregation` | Multi-GPU aggregation: `max`, `min`, `avg`, `sum` | `max` |
+| `aggregation` | Multi-GPU aggregation: `max`, `min`, `avg`, `sum`, `p95`, `p99` | `max` |
 | `pollIntervalSeconds` | Metric polling interval | `10` |
 | `vllmEndpoint` | vLLM engine metrics URL, e.g. `http://vllm-svc:8000/metrics`. Required when `metricType` is `vllm_queue_depth` or `vllm_kv_cache_usage` | (none) |
 
@@ -49,6 +49,7 @@ Profiles bundle defaults for common workloads. Override any parameter in the tri
 | `training` | GPU Util | 90 | 0 | Training jobs (no scale-to-zero) |
 | `batch` | Memory % | 70 | 1 | Batch inference with aggressive scale-down |
 | `ollama` | Memory % | 70 | 3 | Ollama LLM serving with scale-to-zero |
+| `tgi-inference` | Memory % | 75 | 5 | HuggingFace TGI serving with scale-to-zero |
 | `distributed-training` | NVLink TX MB/s | 800 | 100 | Data-parallel training on NVLink systems |
 
 ### Using a profile
@@ -170,6 +171,7 @@ On multi-GPU nodes, `aggregation` controls how per-GPU values are reduced to one
 - **avg** — scale on average utilization. Good for training where GPUs should be evenly loaded.
 - **min** — scale when the least-loaded GPU hits the threshold. Conservative.
 - **sum** — total utilization. Useful for capacity-based decisions.
+- **p95** / **p99** — percentile of per-GPU values (nearest-rank: values are sorted and the element at the percentile's rank is used). On nodes with several GPUs, a single hot GPU can dominate `max` and trigger unnecessary scaling; percentile aggregation lets you ignore that kind of outlier while still reacting to broad load. With few GPUs (roughly 8 or fewer), `p95`/`p99` will often equal `max`, since there aren't enough samples to leave an outlier out of the selected rank.
 
 ## Scale-to-Zero
 

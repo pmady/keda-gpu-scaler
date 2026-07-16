@@ -142,6 +142,14 @@ func TestIsActive(t *testing.T) {
 			wantActive: true, // memory_used_percent = 73.2%, activationValue=5
 		},
 		{
+			name: "active with tgi-inference profile above threshold",
+			devices: []gpu.Metrics{
+				{Index: 0, GPUUtilization: 80, MemoryUsedMiB: 6000, MemoryTotalMiB: 8192},
+			},
+			metadata:   map[string]string{"profile": "tgi-inference"},
+			wantActive: true, // memory_used_percent = 73.2%, activationValue=5
+		},
+		{
 			name: "multi-GPU max aggregation",
 			devices: []gpu.Metrics{
 				{Index: 0, GPUUtilization: 5, MemoryUsedMiB: 100, MemoryTotalMiB: 8192},
@@ -208,6 +216,12 @@ func TestGetMetricSpec(t *testing.T) {
 			metadata:       map[string]string{"profile": "vllm-inference"},
 			wantMetricName: "keda_gpu_vllm_inference",
 			wantTarget:     80,
+		},
+		{
+			name:           "tgi-inference profile",
+			metadata:       map[string]string{"profile": "tgi-inference"},
+			wantMetricName: "keda_gpu_tgi_inference",
+			wantTarget:     75,
 		},
 		{
 			name:           "custom target value",
@@ -445,7 +459,7 @@ func TestAllProfiles(t *testing.T) {
 		},
 	}
 
-	profileNames := []string{"vllm-inference", "triton-inference", "training", "batch"}
+	profileNames := []string{"vllm-inference", "triton-inference", "training", "batch", "ollama", "tgi-inference"}
 
 	addr, cleanup := startTestServer(t, devices)
 	defer cleanup()
@@ -668,6 +682,118 @@ func TestAggregationSum(t *testing.T) {
 	got := resp.MetricValues[0].MetricValueFloat
 	if got != 100 {
 		t.Errorf("sum aggregation = %v, want 100", got)
+	}
+}
+
+// p95 aggregation across 4 GPUs
+func TestAggregationP95(t *testing.T) {
+	devices := []gpu.Metrics{
+		{Index: 0, GPUUtilization: 20},
+		{Index: 1, GPUUtilization: 30},
+		{Index: 2, GPUUtilization: 40},
+		{Index: 3, GPUUtilization: 95}, // one hot GPU
+	}
+	addr, cleanup := startTestServer(t, devices)
+	defer cleanup()
+
+	conn, client := dialScaler(t, addr)
+	defer conn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := client.GetMetrics(ctx, &pb.GetMetricsRequest{
+		ScaledObjectRef: &pb.ScaledObjectRef{
+			Name:      "p95-test",
+			Namespace: "default",
+			ScalerMetadata: map[string]string{
+				"aggregation": "p95",
+			},
+		},
+		MetricName: "keda_gpu_metric",
+	})
+	if err != nil {
+		t.Fatalf("GetMetrics failed: %v", err)
+	}
+	got := resp.MetricValues[0].MetricValueFloat
+	if got != 95 {
+		t.Errorf("p95 aggregation = %v, want 95", got)
+	}
+}
+
+// p99 aggregation across 20 GPUs. With enough samples p95/p99 diverge from
+// max and from each other, which is the point of adding percentile-based
+// aggregation (so a single hot GPU doesn't dominate the metric the way max
+// would).
+func TestAggregationP99(t *testing.T) {
+	devices := make([]gpu.Metrics, 20)
+	for i := range devices {
+		// Utilization values 1..20, so sorting is easy to reason about.
+		devices[i] = gpu.Metrics{Index: i, GPUUtilization: uint32(i + 1)}
+	}
+	addr, cleanup := startTestServer(t, devices)
+	defer cleanup()
+
+	conn, client := dialScaler(t, addr)
+	defer conn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := client.GetMetrics(ctx, &pb.GetMetricsRequest{
+		ScaledObjectRef: &pb.ScaledObjectRef{
+			Name:      "p99-test",
+			Namespace: "default",
+			ScalerMetadata: map[string]string{
+				"aggregation": "p99",
+			},
+		},
+		MetricName: "keda_gpu_metric",
+	})
+	if err != nil {
+		t.Fatalf("GetMetrics failed: %v", err)
+	}
+	got := resp.MetricValues[0].MetricValueFloat
+	if got != 20 {
+		t.Errorf("p99 aggregation = %v, want 20", got)
+	}
+}
+
+// TestAggregationPercentileDivergesFromMax verifies that, with enough GPUs,
+// p95 aggregation ignores the single hottest outlier the way max cannot.
+func TestAggregationPercentileDivergesFromMax(t *testing.T) {
+	devices := make([]gpu.Metrics, 20)
+	for i := range devices {
+		devices[i] = gpu.Metrics{Index: i, GPUUtilization: uint32(i + 1)}
+	}
+	addr, cleanup := startTestServer(t, devices)
+	defer cleanup()
+
+	conn, client := dialScaler(t, addr)
+	defer conn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := client.GetMetrics(ctx, &pb.GetMetricsRequest{
+		ScaledObjectRef: &pb.ScaledObjectRef{
+			Name:      "p95-diverge-test",
+			Namespace: "default",
+			ScalerMetadata: map[string]string{
+				"aggregation": "p95",
+			},
+		},
+		MetricName: "keda_gpu_metric",
+	})
+	if err != nil {
+		t.Fatalf("GetMetrics failed: %v", err)
+	}
+	got := resp.MetricValues[0].MetricValueFloat
+	if got != 19 {
+		t.Errorf("p95 aggregation = %v, want 19", got)
+	}
+	if got == 20 {
+		t.Error("p95 aggregation should not equal the max value (20) when there are enough samples")
 	}
 }
 

@@ -107,7 +107,9 @@ address.
 
 4. For multi-GPU nodes, check whether `aggregation` matches your intent.
    `max` is the default and scales when any GPU crosses the target. `avg` can
-   hide one busy GPU if other GPUs are idle.
+   hide one busy GPU if other GPUs are idle. If a single hot GPU on a node
+   with several GPUs is triggering scaling you don't want, try `p95` or `p99`
+   to ignore that kind of outlier.
 
 ## Metrics return zero
 
