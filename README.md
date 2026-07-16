@@ -46,7 +46,7 @@ This design is documented in [KEDA issue #7538](https://github.com/kedacore/keda
 3. **gRPC Interface** — Implements `externalscaler.ExternalScalerServer` (`IsActive`, `StreamIsActive`, `GetMetricSpec`, `GetMetrics`) to natively integrate with the central KEDA operator.
 4. **ScaledObject Trigger** — Kubernetes deployments scale up/down (including to zero) based on GPU thresholds defined in the ScaledObject.
 
-> **⚠️ Supported Topology**: This scaler is designed for **single GPU node per ScaledObject**. Each DaemonSet pod reports metrics for its local node's GPUs. KEDA queries one pod via the ClusterIP service. **Multi-node cluster-wide aggregation** (e.g., "scale when average GPU utilization across all nodes > 80%") is not yet implemented. For multi-node workloads, deploy one ScaledObject per node or use node selectors. See [#142](https://github.com/pmady/keda-gpu-scaler/issues/142) for the roadmap.
+> **⚠️ Supported Topology**: Each DaemonSet pod reports metrics for its local node only. Multi-node cluster-wide aggregation is not yet implemented — for multi-GPU-node clusters, deploy one ScaledObject per node or use node selectors. See [#142](https://github.com/pmady/keda-gpu-scaler/issues/142) for the roadmap.
 
 ---
 

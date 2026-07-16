@@ -61,7 +61,7 @@ func TestGetBuiltinProfiles(t *testing.T) {
 			profile:    "distributed-training",
 			wantFound:  true,
 			wantMetric: MetricNVLinkTxMBps,
-			wantTarget: 800,
+			wantTarget: 50000,
 		},
 		{
 			name:       "ollama exists",

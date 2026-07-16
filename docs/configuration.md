@@ -107,7 +107,7 @@ triggers:
 
 ### When to use NVLink metrics
 
-Use `nvlink_tx_mbps` / `nvlink_rx_mbps` on **NVSwitch / DGX / HGX** systems where GPUs communicate directly without the CPU (A100: ~600 GB/s aggregate, H100: ~900 GB/s). NVLink saturation indicates the model's communication pattern has outgrown the node — a signal to scale out or adjust parallelism strategy. The `distributed-training` profile uses NVLink TX; **tune the target to your hardware** — the default (800 MB/s) is conservative and may need adjustment based on your GPU generation and link topology.
+Use `nvlink_tx_mbps` / `nvlink_rx_mbps` on **NVSwitch / DGX / HGX** systems where GPUs communicate directly without the CPU (A100: ~600 GB/s aggregate, H100: ~900 GB/s). NVLink saturation indicates the model's communication pattern has outgrown the node — a signal to scale out or adjust parallelism strategy. The `distributed-training` profile uses NVLink TX; **tune the target to your hardware** — the built-in default targets ~50 GB/s which suits A100/H100 systems but may need adjustment for your link topology.
 
 ```yaml
 triggers:

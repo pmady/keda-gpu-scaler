@@ -237,7 +237,6 @@ func parseMetadata(metadata map[string]string) (scalerConfig, error) {
 		return cfg, fmt.Errorf("metricType %q requires vllmEndpoint to be set", cfg.metricType)
 	}
 
-	// Basic SSRF guard: block loopback, link-local, and cloud metadata IPs.
 	if cfg.vllmEndpoint != "" {
 		if err := validateVLLMEndpoint(cfg.vllmEndpoint); err != nil {
 			return cfg, fmt.Errorf("invalid vllmEndpoint: %w", err)
@@ -398,12 +397,16 @@ func aggregate(values []float64, method string) float64 {
 	}
 }
 
-// validateVLLMEndpoint performs basic SSRF validation on the vllmEndpoint URL.
-// It blocks loopback, link-local, and cloud metadata IPs.
+// validateVLLMEndpoint blocks cloud metadata endpoints that could leak credentials.
 func validateVLLMEndpoint(endpoint string) error {
 	u, err := url.Parse(endpoint)
 	if err != nil {
 		return fmt.Errorf("invalid URL: %w", err)
+	}
+
+	scheme := strings.ToLower(u.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return fmt.Errorf("unsupported scheme %q, must be http or https", u.Scheme)
 	}
 
 	host := u.Hostname()
@@ -411,23 +414,23 @@ func validateVLLMEndpoint(endpoint string) error {
 		return fmt.Errorf("missing hostname")
 	}
 
-	// Resolve hostname to IP addresses.
-	ips, err := net.LookupIP(host)
-	if err != nil {
-		return fmt.Errorf("failed to resolve hostname: %w", err)
-	}
-
-	// Block loopback, link-local, and cloud metadata IPs.
-	for _, ip := range ips {
-		if ip.IsLoopback() {
-			return fmt.Errorf("loopback address not allowed: %s", ip)
-		}
+	if ip := net.ParseIP(host); ip != nil {
 		if ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
 			return fmt.Errorf("link-local address not allowed: %s", ip)
 		}
-		// Block AWS, GCP, Azure metadata endpoints.
-		if ip.String() == "169.254.169.254" || strings.HasPrefix(ip.String(), "169.254.169.") {
+		if ip.Equal(net.ParseIP("169.254.169.254")) {
 			return fmt.Errorf("cloud metadata address not allowed: %s", ip)
+		}
+	}
+
+	lower := strings.ToLower(host)
+	blockedHosts := []string{
+		"metadata.google.internal",
+		"metadata.goog",
+	}
+	for _, blocked := range blockedHosts {
+		if lower == blocked {
+			return fmt.Errorf("cloud metadata hostname not allowed: %s", host)
 		}
 	}
 
