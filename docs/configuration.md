@@ -196,6 +196,7 @@ These flags configure the scaler binary itself (passed via `args` in the DaemonS
 | `--port` | gRPC server port | `6000` |
 | `--metrics-port` | Prometheus HTTP metrics port (0 to disable) | `9090` |
 | `--probe-port` | Liveness/readiness HTTP probe port (0 to disable) | `8081` |
+| `--health-check-interval` | How often NVML is polled for the gRPC health check | `30s` |
 | `--log-level` | Log level: `debug`, `info`, `warn`, `error` | `info` |
 
 ### Helm Values
@@ -210,7 +211,10 @@ metrics:
 
 probes:
   enabled: true
+  type: grpc       # grpc (default, k8s 1.24+) or http
   port: 8081
+
+healthCheckInterval: 30s
 
 logLevel: info
 ```
@@ -237,10 +241,18 @@ When `--metrics-port` is non-zero, an HTTP server exposes `/metrics` in Promethe
 
 ## Kubernetes Probes
 
+### gRPC health check
+
+The gRPC server registers the [gRPC Health Checking Protocol](https://github.com/grpc/grpc/blob/master/doc/health-checking.md) (`google.golang.org/grpc/health`, `grpc_health_v1`) for the server-wide (`""`) service. A background checker (`pkg/healthcheck`) calls `DeviceCount()` on the NVML collector every `--health-check-interval` (default `30s`, minimum one immediate check at startup) and sets the status to `SERVING` on success or `NOT_SERVING` on any NVML error. This is what the Helm chart's default `grpc` liveness/readiness probes (Kubernetes 1.24+) check.
+
+### HTTP probes
+
 When `--probe-port` is non-zero, an HTTP server exposes:
 
 - `/healthz` — returns 200 while the scaler process is alive.
 - `/readyz` — returns 200 after NVML initializes and the first metrics collection succeeds.
+
+Used by the Helm chart when `probes.type: http` (for clusters on a kubelet older than 1.24).
 
 ## Examples
 

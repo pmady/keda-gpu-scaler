@@ -21,6 +21,7 @@ package e2e
 
 import (
 	"context"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -35,6 +36,7 @@ import (
 
 	pb "github.com/pmady/keda-gpu-scaler/pkg/externalscaler"
 	"github.com/pmady/keda-gpu-scaler/pkg/gpu"
+	"github.com/pmady/keda-gpu-scaler/pkg/healthcheck"
 	"github.com/pmady/keda-gpu-scaler/pkg/scaler"
 )
 
@@ -64,6 +66,45 @@ func startTestServer(t *testing.T, devices []gpu.Metrics) (string, func()) {
 	}()
 
 	return lis.Addr().String(), func() { srv.GracefulStop() }
+}
+
+// startTestServerWithHealthChecker wires up a real healthcheck.Checker (the
+// same one main.go runs in production) against the gRPC health server, on a
+// fast interval suitable for tests. The returned *gpu.MockCollector can be
+// mutated by the test to simulate NVML failures/recoveries.
+func startTestServerWithHealthChecker(t *testing.T, devices []gpu.Metrics, interval time.Duration) (string, *gpu.MockCollector, func()) {
+	t.Helper()
+
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+
+	logger, _ := zap.NewDevelopment()
+	mock := gpu.NewMockCollector(devices)
+	gpuScaler := scaler.NewGPUExternalScaler(mock, logger)
+
+	srv := grpc.NewServer()
+	pb.RegisterExternalScalerServer(srv, gpuScaler)
+
+	healthSrv := health.NewServer()
+	healthpb.RegisterHealthServer(srv, healthSrv)
+
+	checkerCtx, cancelChecker := context.WithCancel(context.Background())
+	checker := healthcheck.New(mock, healthSrv, interval, logger)
+	go checker.Run(checkerCtx)
+
+	go func() {
+		if err := srv.Serve(lis); err != nil {
+			// server stopped
+		}
+	}()
+
+	cleanup := func() {
+		cancelChecker()
+		srv.GracefulStop()
+	}
+	return lis.Addr().String(), mock, cleanup
 }
 
 func dialScaler(t *testing.T, addr string) (*grpc.ClientConn, pb.ExternalScalerClient) {
@@ -108,6 +149,61 @@ func TestHealthCheck(t *testing.T) {
 	if resp.Status != healthpb.HealthCheckResponse_SERVING {
 		t.Errorf("expected SERVING, got %v", resp.Status)
 	}
+}
+
+// TestHealthCheck_ReflectsNVMLAvailability drives the real periodic
+// healthcheck.Checker end-to-end over an actual gRPC connection: it starts
+// SERVING, flips to NOT_SERVING when NVML calls start failing, and recovers
+// to SERVING once NVML responds again. Covers issue #109's acceptance
+// criteria that gRPC health status reflects NVML availability.
+func TestHealthCheck_ReflectsNVMLAvailability(t *testing.T) {
+	devices := []gpu.Metrics{
+		{Index: 0, GPUUtilization: 50, MemoryUsedMiB: 4096, MemoryTotalMiB: 8192},
+	}
+	addr, mock, cleanup := startTestServerWithHealthChecker(t, devices, 20*time.Millisecond)
+	defer cleanup()
+
+	conn, err := grpc.DialContext(context.Background(), addr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(),
+	)
+	if err != nil {
+		t.Fatalf("failed to connect: %v", err)
+	}
+	defer conn.Close()
+
+	healthClient := healthpb.NewHealthClient(conn)
+
+	waitForStatus := func(t *testing.T, want healthpb.HealthCheckResponse_ServingStatus) {
+		t.Helper()
+		deadline := time.Now().Add(2 * time.Second)
+		var last healthpb.HealthCheckResponse_ServingStatus
+		for time.Now().Before(deadline) {
+			ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+			resp, err := healthClient.Check(ctx, &healthpb.HealthCheckRequest{})
+			cancel()
+			if err != nil {
+				t.Fatalf("health check failed: %v", err)
+			}
+			last = resp.Status
+			if last == want {
+				return
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+		t.Fatalf("timed out waiting for status %v, last observed %v", want, last)
+	}
+
+	// Starts SERVING since NVML (mock) is healthy.
+	waitForStatus(t, healthpb.HealthCheckResponse_SERVING)
+
+	// Simulate NVML failing (e.g. driver reset).
+	mock.SetDeviceCountErr(errors.New("nvml: driver/library version mismatch"))
+	waitForStatus(t, healthpb.HealthCheckResponse_NOT_SERVING)
+
+	// NVML recovers.
+	mock.SetDeviceCountErr(nil)
+	waitForStatus(t, healthpb.HealthCheckResponse_SERVING)
 }
 
 func TestIsActive(t *testing.T) {

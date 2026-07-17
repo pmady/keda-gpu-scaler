@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"net"
@@ -37,6 +38,7 @@ import (
 	"github.com/pmady/keda-gpu-scaler/pkg/env"
 	pb "github.com/pmady/keda-gpu-scaler/pkg/externalscaler"
 	"github.com/pmady/keda-gpu-scaler/pkg/gpu"
+	"github.com/pmady/keda-gpu-scaler/pkg/healthcheck"
 	"github.com/pmady/keda-gpu-scaler/pkg/metrics"
 	"github.com/pmady/keda-gpu-scaler/pkg/probes"
 	"github.com/pmady/keda-gpu-scaler/pkg/scaler"
@@ -44,11 +46,12 @@ import (
 )
 
 var (
-	port        = flag.Int("port", 6000, "gRPC server port")
-	metricsPort = flag.Int("metrics-port", 9090, "Prometheus metrics HTTP port (0 to disable)")
-	probePort   = flag.Int("probe-port", 8081, "Health/readiness HTTP port (0 to disable)")
-	logLevel    = flag.String("log-level", "info", "Log level (debug, info, warn, error)")
-	showVersion = flag.Bool("version", false, "Print version information and exit")
+	port                = flag.Int("port", 6000, "gRPC server port")
+	metricsPort         = flag.Int("metrics-port", 9090, "Prometheus metrics HTTP port (0 to disable)")
+	probePort           = flag.Int("probe-port", 8081, "Health/readiness HTTP port (0 to disable)")
+	logLevel            = flag.String("log-level", "info", "Log level (debug, info, warn, error)")
+	healthCheckInterval = flag.Duration("health-check-interval", healthcheck.DefaultInterval, "How often to poll NVML for the gRPC health check")
+	showVersion         = flag.Bool("version", false, "Print version information and exit")
 )
 
 func main() {
@@ -158,10 +161,17 @@ func main() {
 	gpuScaler := scaler.NewGPUExternalScaler(metricsCollector, logger)
 	pb.RegisterExternalScalerServer(grpcServer, gpuScaler)
 
-	// Register health check
+	// Register health check. The gRPC Health Checking Protocol status for the
+	// server-wide service ("") tracks NVML availability: a background checker
+	// polls metricsCollector.DeviceCount() on healthCheckInterval and reports
+	// SERVING/NOT_SERVING accordingly (see pkg/healthcheck).
 	healthServer := health.NewServer()
 	healthpb.RegisterHealthServer(grpcServer, healthServer)
-	healthServer.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
+
+	checkerCtx, cancelChecker := context.WithCancel(context.Background())
+	defer cancelChecker()
+	checker := healthcheck.New(metricsCollector, healthServer, *healthCheckInterval, logger)
+	go checker.Run(checkerCtx)
 
 	// Register reflection for debugging
 	reflection.Register(grpcServer)
@@ -173,6 +183,7 @@ func main() {
 	go func() {
 		sig := <-sigCh
 		logger.Info("Received shutdown signal", zap.String("signal", sig.String()))
+		cancelChecker()
 		grpcServer.GracefulStop()
 	}()
 

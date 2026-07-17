@@ -239,7 +239,35 @@ All per-GPU metrics are labeled with `gpu_index`, `gpu_uuid`, and `gpu_name`.
 
 ## Kubernetes Probes
 
-The scaler exposes liveness and readiness endpoints on a dedicated probe port:
+The scaler supports two probe mechanisms; the Helm chart defaults to gRPC.
+
+### gRPC health check (recommended)
+
+The gRPC server implements the [gRPC Health Checking Protocol](https://github.com/grpc/grpc/blob/master/doc/health-checking.md) (`google.golang.org/grpc/health`, `grpc_health_v1`) on the server-wide (`""`) service. A background checker polls NVML (`DeviceCount()`) every `--health-check-interval` (default `30s`) and reports:
+
+- `SERVING` while NVML responds normally.
+- `NOT_SERVING` if the NVML call fails.
+
+```bash
+--health-check-interval=30s
+```
+
+Kubernetes 1.24+ can probe this natively:
+
+```yaml
+livenessProbe:
+  grpc:
+    port: 6000
+readinessProbe:
+  grpc:
+    port: 6000
+```
+
+Helm sets this up automatically (`probes.type: grpc`, the default).
+
+### HTTP probes (legacy / pre-1.24 clusters)
+
+A dedicated HTTP probe port also exposes:
 
 - `/healthz` returns `200` while the process is alive.
 - `/readyz` returns `200` after NVML initializes and the first metrics collection succeeds.
@@ -252,6 +280,7 @@ Helm:
 ```yaml
 probes:
   enabled: true
+  type: http
   port: 8081
 ```
 

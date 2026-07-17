@@ -10,7 +10,8 @@ that KEDA `ScaledObject`s point at through an `external` trigger.
 
 ## Prerequisites
 
-- Kubernetes 1.21+
+- Kubernetes 1.24+ (for the default `grpc` liveness/readiness probes; set
+  `probes.type: http` to support older clusters down to 1.21)
 - [KEDA](https://keda.sh/docs/latest/deploy/) installed in the cluster
 - NVIDIA GPU nodes with the driver (`libnvidia-ml.so`) available — either via the
   NVIDIA container runtime (the default, `runtimeClassName: nvidia`) or via
@@ -94,8 +95,10 @@ metrics endpoint rather than GPU utilization/memory, and requires a
 | `logLevel` | string | `info` | Log verbosity: `debug`, `info`, `warn`, or `error` (passed as `--log-level`). |
 | `metrics.enabled` | bool | `true` | Enable the Prometheus metrics endpoint. When false, the scaler runs with `--metrics-port=0` and no metrics container port or Service entry is created. |
 | `metrics.port` | int | `9090` | Port for the Prometheus metrics HTTP server (passed as `--metrics-port`). |
-| `probes.enabled` | bool | `true` | Enable the health/readiness HTTP server and the pod liveness/readiness probes. When false, the scaler runs with `--probe-port=0` and no probes are set. |
-| `probes.port` | int | `8081` | Port for the health/readiness HTTP server (passed as `--probe-port`). |
+| `probes.enabled` | bool | `true` | Enable the pod liveness/readiness probes. |
+| `probes.type` | string | `grpc` | Probe type: `grpc` checks the gRPC Health Checking Protocol status on `grpc.port`, which reflects NVML availability (requires Kubernetes 1.24+). `http` uses the `/healthz`/`/readyz` endpoints on `probes.port` instead. |
+| `probes.port` | int | `8081` | Port for the health/readiness HTTP server (passed as `--probe-port`, `0` to disable). |
+| `healthCheckInterval` | string | `30s` | How often the scaler polls NVML for the gRPC health check (passed as `--health-check-interval`). |
 
 ### GPU access
 

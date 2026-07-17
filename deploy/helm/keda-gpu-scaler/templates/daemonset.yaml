@@ -45,6 +45,7 @@ spec:
             {{- else }}
             - --probe-port=0
             {{- end }}
+            - --health-check-interval={{ .Values.healthCheckInterval }}
           ports:
             - name: grpc
               containerPort: {{ .Values.grpc.port }}
@@ -62,6 +63,20 @@ spec:
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           {{- if .Values.probes.enabled }}
+          {{- if eq .Values.probes.type "grpc" }}
+          # Uses the gRPC Health Checking Protocol status registered on the
+          # main gRPC server, which reflects NVML availability.
+          livenessProbe:
+            grpc:
+              port: {{ .Values.grpc.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            grpc:
+              port: {{ .Values.grpc.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          {{- else }}
           livenessProbe:
             httpGet:
               path: /healthz
@@ -74,6 +89,7 @@ spec:
               port: probes
             initialDelaySeconds: 5
             periodSeconds: 10
+          {{- end }}
           {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}

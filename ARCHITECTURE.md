@@ -60,9 +60,9 @@ NVIDIA's go-nvml library wraps the C NVML library. There's no pure-Go alternativ
 
 | Port | Protocol | Purpose |
 |------|----------|---------|
-| 6000 | gRPC | KEDA external scaler interface |
+| 6000 | gRPC | KEDA external scaler interface; also serves the gRPC Health Checking Protocol (`grpc.health.v1.Health`), reflecting NVML availability |
 | 9090 | HTTP | Prometheus metrics (optional) |
-| 8080 | HTTP | Health probes (`/healthz`, `/readyz`) |
+| 8081 | HTTP | Legacy health probes (`/healthz`, `/readyz`), used when `probes.type: http` |
 
 ## Resource Requirements
 

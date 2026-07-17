@@ -16,16 +16,34 @@ limitations under the License.
 
 package gpu
 
-import "fmt"
+import (
+	"fmt"
+	"sync"
+)
 
 // MockCollector is a test double for MetricsCollector.
 type MockCollector struct {
 	Devices []Metrics
+
+	mu sync.RWMutex
+	// deviceCountErr, when set via SetDeviceCountErr, is returned by
+	// DeviceCount instead of the device count. Useful for simulating NVML
+	// failures (e.g. in health check tests) without a real GPU.
+	deviceCountErr error
 }
 
 // NewMockCollector returns a mock backed by the given devices.
 func NewMockCollector(devices []Metrics) *MockCollector {
 	return &MockCollector{Devices: devices}
+}
+
+// SetDeviceCountErr configures the error DeviceCount returns going forward
+// (nil clears it). Safe to call concurrently with DeviceCount, so tests can
+// flip NVML availability while a background health checker is polling it.
+func (m *MockCollector) SetDeviceCountErr(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.deviceCountErr = err
 }
 
 func (m *MockCollector) CollectAll() ([]Metrics, error) {
@@ -49,6 +67,12 @@ func (m *MockCollector) CollectByUUID(uuid string) (Metrics, error) {
 }
 
 func (m *MockCollector) DeviceCount() (int, error) {
+	m.mu.RLock()
+	err := m.deviceCountErr
+	m.mu.RUnlock()
+	if err != nil {
+		return 0, err
+	}
 	return len(m.Devices), nil
 }
 

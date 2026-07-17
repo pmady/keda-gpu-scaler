@@ -51,11 +51,25 @@ metrics:
   port: 9090
 
 probes:
-  # -- Enable the health/readiness HTTP server and the pod liveness/readiness
-  # probes. When false, the scaler runs with `--probe-port=0` and no probes are set.
+  # -- Enable the pod liveness/readiness probes. When false, no probes are set
+  # on the container (the `--probe-port` HTTP server still runs unless
+  # `probes.port` is 0).
   enabled: true
-  # -- Port for the health/readiness HTTP server (passed as `--probe-port`).
+  # -- Probe type: `grpc` (default) checks the gRPC Health Checking Protocol
+  # status registered on the main gRPC server (`grpc.port`), which reflects
+  # NVML availability (SERVING while NVML responds, NOT_SERVING when calls
+  # fail). Requires Kubernetes 1.24+ (native `grpc` probe support). Set to
+  # `http` to instead use the `/healthz` and `/readyz` endpoints exposed by
+  # the HTTP probe server on `probes.port`, for older clusters.
+  type: grpc
+  # -- Port for the health/readiness HTTP server (passed as `--probe-port`,
+  # 0 to disable). Only used for the probes themselves when `probes.type`
+  # is `http`.
   port: 8081
+
+# -- How often the scaler polls NVML for the gRPC health check (passed as
+# `--health-check-interval`, e.g. `30s`, `1m`).
+healthCheckInterval: 30s
 
 # -- Node selector for scheduling scaler pods. Defaults to NVIDIA GPU nodes.
 nodeSelector:
