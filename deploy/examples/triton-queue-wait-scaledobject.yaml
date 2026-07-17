@@ -1,0 +1,35 @@
+# Example: ScaledObject for a Triton Inference Server deployment that scales
+# on average inference queue wait time, read directly from Triton's own
+# Prometheus metrics endpoint instead of GPU utilization/memory.
+#
+# Prerequisites:
+#   - keda-gpu-scaler DaemonSet running (kubectl apply -f deploy/manifests.yaml)
+#   - KEDA v2.10+ installed
+#   - A Deployment named "triton-resnet-deployment" in the "ai-workloads" namespace,
+#     with a Service exposing Triton's Prometheus metrics endpoint (default :8002/metrics)
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: triton-queue-wait-scaler
+  namespace: ai-workloads
+spec:
+  scaleTargetRef:
+    name: triton-resnet-deployment
+  minReplicaCount: 1
+  maxReplicaCount: 50
+  cooldownPeriod: 30
+  triggers:
+    - type: external
+      metadata:
+        # Points to the Service created by deploy/manifests.yaml
+        scalerAddress: "keda-gpu-scaler.keda.svc.cluster.local:6000"
+        # Use the pre-built Triton queue-wait profile (target: 50ms average
+        # queue wait, activation: 5ms). Override targetValue/activationThreshold
+        # here to tune for your workload.
+        profile: "triton-queue-wait"
+        # Triton's own metrics endpoint — required for triton_queue_wait_ms /
+        # triton_request_rate metric types. Average queue wait time is
+        # derived from Triton's cumulative counters, so it only becomes
+        # meaningful after the scaler has polled this endpoint at least
+        # twice (poll interval defaults to 10s via pollIntervalSeconds).
+        tritonEndpoint: "http://triton-resnet-deployment:8002/metrics"

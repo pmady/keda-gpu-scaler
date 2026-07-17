@@ -47,6 +47,14 @@ const (
 	// vLLM engine metrics — scraped from the vLLM /metrics endpoint, not NVML.
 	MetricVLLMQueueDepth   MetricType = "vllm_queue_depth"
 	MetricVLLMKVCacheUsage MetricType = "vllm_kv_cache_usage"
+
+	// Triton engine metrics — scraped from Triton's own /metrics endpoint,
+	// not NVML. Both are derived from Triton's cumulative counters by diffing
+	// two consecutive scrapes (see pkg/triton), so they only become
+	// meaningful after a scaler has polled the same tritonEndpoint at least
+	// twice.
+	MetricTritonQueueWaitMs MetricType = "triton_queue_wait_ms"
+	MetricTritonRequestRate MetricType = "triton_request_rate"
 )
 
 // AllMetricTypes returns every supported MetricType, in a stable order suitable
@@ -65,6 +73,8 @@ func AllMetricTypes() []MetricType {
 		MetricNVLinkRxMBps,
 		MetricVLLMQueueDepth,
 		MetricVLLMKVCacheUsage,
+		MetricTritonQueueWaitMs,
+		MetricTritonRequestRate,
 	}
 }
 
@@ -73,13 +83,19 @@ func IsVLLMMetric(t MetricType) bool {
 	return t == MetricVLLMQueueDepth || t == MetricVLLMKVCacheUsage
 }
 
+// IsTritonMetric reports whether t requires the Triton engine endpoint rather than NVML.
+func IsTritonMetric(t MetricType) bool {
+	return t == MetricTritonQueueWaitMs || t == MetricTritonRequestRate
+}
+
 // ValidMetricType reports whether t is a recognized MetricType.
 func ValidMetricType(t MetricType) bool {
 	switch t {
 	case MetricGPUUtilization, MetricMemoryUtilization, MetricMemoryUsedMiB,
 		MetricMemoryUsedPercent, MetricTemperature, MetricPowerDraw,
 		MetricPCIeTxKBps, MetricPCIeRxKBps, MetricNVLinkTxMBps, MetricNVLinkRxMBps,
-		MetricVLLMQueueDepth, MetricVLLMKVCacheUsage:
+		MetricVLLMQueueDepth, MetricVLLMKVCacheUsage,
+		MetricTritonQueueWaitMs, MetricTritonRequestRate:
 		return true
 	default:
 		return false
@@ -128,6 +144,28 @@ var builtinProfiles = map[string]Profile{
 		TargetValue:        75,
 		ActivationValue:    10,
 		MetricType:         MetricGPUUtilization,
+		CooldownSeconds:    30,
+		ScaleUpStabilize:   10,
+		ScaleDownStabilize: 90,
+	},
+	"triton-queue-wait": {
+		Name:               "triton-queue-wait",
+		MetricName:         "keda_gpu_triton_queue_wait",
+		Description:        "Triton Inference Server — scale on average inference queue wait time via the engine API",
+		TargetValue:        50, // milliseconds
+		ActivationValue:    5,
+		MetricType:         MetricTritonQueueWaitMs,
+		CooldownSeconds:    30,
+		ScaleUpStabilize:   10,
+		ScaleDownStabilize: 60,
+	},
+	"triton-request-rate": {
+		Name:               "triton-request-rate",
+		MetricName:         "keda_gpu_triton_request_rate",
+		Description:        "Triton Inference Server — scale on inference request rate via the engine API",
+		TargetValue:        50, // requests/sec
+		ActivationValue:    1,
+		MetricType:         MetricTritonRequestRate,
 		CooldownSeconds:    30,
 		ScaleUpStabilize:   10,
 		ScaleDownStabilize: 90,

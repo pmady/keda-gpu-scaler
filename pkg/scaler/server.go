@@ -32,23 +32,26 @@ import (
 	pb "github.com/pmady/keda-gpu-scaler/pkg/externalscaler"
 	"github.com/pmady/keda-gpu-scaler/pkg/gpu"
 	"github.com/pmady/keda-gpu-scaler/pkg/profiles"
+	"github.com/pmady/keda-gpu-scaler/pkg/triton"
 	"github.com/pmady/keda-gpu-scaler/pkg/vllm"
 )
 
 // GPUExternalScaler implements the KEDA ExternalScaler gRPC interface.
 type GPUExternalScaler struct {
 	pb.UnimplementedExternalScalerServer
-	collector   gpu.MetricsCollector
-	vllmClients map[string]*vllm.Client // keyed by endpoint URL
-	logger      *zap.Logger
+	collector     gpu.MetricsCollector
+	vllmClients   map[string]*vllm.Client   // keyed by endpoint URL
+	tritonClients map[string]*triton.Client // keyed by endpoint URL
+	logger        *zap.Logger
 }
 
 // NewGPUExternalScaler creates a new GPU external scaler server.
 func NewGPUExternalScaler(collector gpu.MetricsCollector, logger *zap.Logger) *GPUExternalScaler {
 	return &GPUExternalScaler{
-		collector:   collector,
-		vllmClients: make(map[string]*vllm.Client),
-		logger:      logger,
+		collector:     collector,
+		vllmClients:   make(map[string]*vllm.Client),
+		tritonClients: make(map[string]*triton.Client),
+		logger:        logger,
 	}
 }
 
@@ -141,6 +144,7 @@ type scalerConfig struct {
 	aggregation         string
 	pollIntervalSeconds int
 	vllmEndpoint        string // e.g. "http://vllm-svc:8000/metrics"
+	tritonEndpoint      string // e.g. "http://triton-svc:8002/metrics"
 }
 
 func parseMetadata(metadata map[string]string) (scalerConfig, error) {
@@ -233,15 +237,27 @@ func parseMetadata(metadata map[string]string) (scalerConfig, error) {
 	if v, ok := metadata["vllmEndpoint"]; ok {
 		cfg.vllmEndpoint = v
 	}
+	if v, ok := metadata["tritonEndpoint"]; ok {
+		cfg.tritonEndpoint = v
+	}
 
 	// vLLM metrics require the endpoint to be set.
 	if profiles.IsVLLMMetric(cfg.metricType) && cfg.vllmEndpoint == "" {
 		return cfg, fmt.Errorf("metricType %q requires vllmEndpoint to be set", cfg.metricType)
 	}
+	// Triton engine metrics require the endpoint to be set.
+	if profiles.IsTritonMetric(cfg.metricType) && cfg.tritonEndpoint == "" {
+		return cfg, fmt.Errorf("metricType %q requires tritonEndpoint to be set", cfg.metricType)
+	}
 
 	if cfg.vllmEndpoint != "" {
 		if err := validateVLLMEndpoint(cfg.vllmEndpoint); err != nil {
 			return cfg, fmt.Errorf("invalid vllmEndpoint: %w", err)
+		}
+	}
+	if cfg.tritonEndpoint != "" {
+		if err := validateVLLMEndpoint(cfg.tritonEndpoint); err != nil {
+			return cfg, fmt.Errorf("invalid tritonEndpoint: %w", err)
 		}
 	}
 
@@ -259,10 +275,29 @@ func (s *GPUExternalScaler) getVLLMClient(endpoint string) *vllm.Client {
 	return c
 }
 
+// getTritonClient returns a cached Triton client for the given endpoint,
+// creating one on first use. Caching per endpoint (rather than creating a
+// throwaway client per Scrape) is required for the triton-queue-wait /
+// triton-request-rate metric types to work at all: pkg/triton derives them
+// by diffing two consecutive scrapes, so the same *triton.Client must be
+// reused across polls of a given ScaledObject.
+func (s *GPUExternalScaler) getTritonClient(endpoint string) *triton.Client {
+	if c, ok := s.tritonClients[endpoint]; ok {
+		return c
+	}
+	c := triton.NewClient(endpoint)
+	s.tritonClients[endpoint] = c
+	return c
+}
+
 func (s *GPUExternalScaler) getMetricValue(cfg scalerConfig) (float64, error) {
 	// vLLM metrics come from the engine HTTP endpoint, not NVML.
 	if profiles.IsVLLMMetric(cfg.metricType) {
 		return s.getVLLMMetricValue(cfg)
+	}
+	// Triton engine metrics come from Triton's own HTTP endpoint, not NVML.
+	if profiles.IsTritonMetric(cfg.metricType) {
+		return s.getTritonMetricValue(cfg)
 	}
 
 	if cfg.gpuIndex >= 0 {
@@ -326,6 +361,32 @@ func (s *GPUExternalScaler) getVLLMMetricValue(cfg scalerConfig) (float64, error
 		zap.Float64("queue_depth", m.QueueDepth),
 		zap.Float64("running", m.RunningCount),
 		zap.Float64("kv_cache", m.KVCacheUsage),
+	)
+	return value, nil
+}
+
+func (s *GPUExternalScaler) getTritonMetricValue(cfg scalerConfig) (float64, error) {
+	c := s.getTritonClient(cfg.tritonEndpoint)
+	m, err := c.Scrape()
+	if err != nil {
+		return 0, err
+	}
+
+	var value float64
+	switch cfg.metricType {
+	case profiles.MetricTritonQueueWaitMs:
+		value = m.AvgQueueWaitUs / 1000 // normalize microseconds -> milliseconds
+	case profiles.MetricTritonRequestRate:
+		value = m.RequestRatePerSec
+	}
+
+	s.logger.Debug("scraped Triton metric",
+		zap.String("endpoint", cfg.tritonEndpoint),
+		zap.String("metric_type", string(cfg.metricType)),
+		zap.Float64("value", value),
+		zap.Float64("avg_queue_wait_us", m.AvgQueueWaitUs),
+		zap.Float64("request_rate_per_sec", m.RequestRatePerSec),
+		zap.Float64("inference_count", m.InferenceCount),
 	)
 	return value, nil
 }
@@ -422,7 +483,9 @@ func percentile(values []float64, p float64) float64 {
 	return sorted[idx]
 }
 
-// validateVLLMEndpoint blocks cloud metadata endpoints that could leak credentials.
+// validateVLLMEndpoint blocks cloud metadata endpoints that could leak
+// credentials. It's also used to validate tritonEndpoint: the check is a
+// generic HTTP(S) URL / SSRF guard with nothing vLLM-specific about it.
 func validateVLLMEndpoint(endpoint string) error {
 	u, err := url.Parse(endpoint)
 	if err != nil {

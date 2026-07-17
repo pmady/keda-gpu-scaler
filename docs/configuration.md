@@ -16,6 +16,7 @@ Everything goes in the ScaledObject trigger `metadata`. No config files or extra
 | `aggregation` | Multi-GPU aggregation: `max`, `min`, `avg`, `sum`, `p95`, `p99` | `max` |
 | `pollIntervalSeconds` | Metric polling interval | `10` |
 | `vllmEndpoint` | vLLM engine metrics URL, e.g. `http://vllm-svc:8000/metrics`. Required when `metricType` is `vllm_queue_depth` or `vllm_kv_cache_usage` | (none) |
+| `tritonEndpoint` | Triton engine metrics URL, e.g. `http://triton-svc:8002/metrics`. Required when `metricType` is `triton_queue_wait_ms` or `triton_request_rate` | (none) |
 
 ### Supported metricType values
 
@@ -33,9 +34,12 @@ Everything goes in the ScaledObject trigger `metadata`. No config files or extra
 | `nvlink_rx_mbps` | MB/s | Aggregate NVLink receive throughput across all active links |
 | `vllm_queue_depth` | count | Pending requests waiting in the vLLM engine (`vllm:num_requests_waiting`) — requires `vllmEndpoint`, see [vLLM Engine Metrics](#vllm-engine-metrics) |
 | `vllm_kv_cache_usage` | % | vLLM GPU KV cache usage (`vllm:gpu_cache_usage_perc`, normalized to 0-100) — requires `vllmEndpoint`, see [vLLM Engine Metrics](#vllm-engine-metrics) |
+| `triton_queue_wait_ms` | ms | Average Triton inference queue wait time, derived from `nv_inference_queue_duration_us` — requires `tritonEndpoint`, see [Triton Engine Metrics](#triton-engine-metrics) |
+| `triton_request_rate` | requests/sec | Triton inference request rate, derived from `nv_inference_count` — requires `tritonEndpoint`, see [Triton Engine Metrics](#triton-engine-metrics) |
 
 The `vllm_*` metrics bypass NVML entirely and are scraped directly from the
-vLLM engine's own metrics endpoint.
+vLLM engine's own metrics endpoint. The `triton_*` metrics likewise bypass
+NVML and are scraped from Triton's own metrics endpoint.
 
 ## Scaling Profiles
 
@@ -46,6 +50,8 @@ Profiles bundle defaults for common workloads. Override any parameter in the tri
 | `vllm-inference` | Memory % | 80 | 5 | vLLM / LLM serving with scale-to-zero |
 | `vllm-queue-depth` | Pending requests | 5 | 1 | vLLM — scale on queue depth via the engine API, see [vLLM Engine Metrics](#vllm-engine-metrics) |
 | `triton-inference` | GPU Util | 75 | 10 | NVIDIA Triton Inference Server |
+| `triton-queue-wait` | Queue wait (ms) | 50 | 5 | Triton — scale on average inference queue wait time via the engine API, see [Triton Engine Metrics](#triton-engine-metrics) |
+| `triton-request-rate` | Requests/sec | 50 | 1 | Triton — scale on inference request rate via the engine API, see [Triton Engine Metrics](#triton-engine-metrics) |
 | `training` | GPU Util | 90 | 0 | Training jobs (no scale-to-zero) |
 | `batch` | Memory % | 70 | 1 | Batch inference with aggressive scale-down |
 | `ollama` | Memory % | 70 | 3 | Ollama LLM serving with scale-to-zero |
@@ -163,6 +169,51 @@ triggers:
 
 Use `vllm-inference` (VRAM-based) as a simple default — it needs no extra endpoint and scale-to-zero works out of the box. Switch to `vllm-queue-depth` (or raw `vllm_queue_depth` / `vllm_kv_cache_usage`) when you want faster reaction to load spikes than VRAM pressure alone provides, and can reach the vLLM engine's metrics port from the scaler's DaemonSet pods.
 
+## Triton Engine Metrics
+
+Like the vLLM engine metrics above, `triton-inference` (GPU utilization) is a proxy for load. NVIDIA Triton Inference Server exposes more direct signals on its own Prometheus `/metrics` endpoint (default port `8002`), and `pkg/triton` scrapes it so KEDA can scale on Triton's real request-handling behavior instead.
+
+| metricType | Source metric | What it tells you |
+|------------|----------------|--------------------|
+| `triton_queue_wait_ms` | `nv_inference_queue_duration_us` | Average time inference requests spend waiting in Triton's scheduling queue — a direct sign the server can't keep up |
+| `triton_request_rate` | `nv_inference_count` | Inference throughput (requests/sec) — useful for capacity-based scaling decisions |
+
+Both require `tritonEndpoint` — the full URL of Triton's metrics endpoint (e.g. `http://triton-svc:8002/metrics`), reachable from the scaler DaemonSet pods. `getMetricValue` routes any `triton_*` metricType to this HTTP client instead of the NVML collector; the scaler keeps one cached client per distinct `tritonEndpoint`.
+
+Unlike vLLM's queue depth (an instantaneous gauge), Triton reports `nv_inference_queue_duration_us` and `nv_inference_count` as **cumulative counters** that only ever increase. `pkg/triton` derives `triton_queue_wait_ms` and `triton_request_rate` by diffing two consecutive scrapes of the same endpoint — the change in cumulative queue time divided by the change in inference count for queue wait, and the change in inference count divided by elapsed time for request rate. This means:
+
+- Both metrics report `0` on the very first scrape of a given `tritonEndpoint`, since there's no prior sample to diff against.
+- They become meaningful after the scaler has polled the same endpoint at least twice, which happens naturally as KEDA (or `pollIntervalSeconds` in `StreamIsActive`) polls on an interval.
+- If Triton restarts and its counters reset to a smaller value, the derived metrics fall back to `0` for that scrape rather than reporting a nonsensical negative rate.
+
+### Using the triton-queue-wait profile
+
+```yaml
+triggers:
+  - type: external
+    metadata:
+      scalerAddress: "keda-gpu-scaler.keda.svc.cluster.local:6000"
+      profile: "triton-queue-wait"
+      tritonEndpoint: "http://triton-resnet-deployment:8002/metrics"
+```
+
+### Using triton_request_rate directly
+
+```yaml
+triggers:
+  - type: external
+    metadata:
+      scalerAddress: "keda-gpu-scaler.keda.svc.cluster.local:6000"
+      metricType: "triton_request_rate"
+      tritonEndpoint: "http://triton-resnet-deployment:8002/metrics"
+      targetValue: "100"          # scale out past 100 requests/sec
+      activationThreshold: "1"
+```
+
+### triton-inference vs. triton-queue-wait / triton-request-rate
+
+Use `triton-inference` (GPU-utilization-based) as a simple default — it needs no extra endpoint. Switch to `triton-queue-wait` or `triton-request-rate` when you want to scale on Triton's actual request-handling behavior rather than a GPU utilization proxy, and can reach Triton's metrics port from the scaler's DaemonSet pods.
+
 ## Multi-GPU Aggregation
 
 On multi-GPU nodes, `aggregation` controls how per-GPU values are reduced to one number:
@@ -248,4 +299,6 @@ Check `deploy/examples/` for ScaledObject manifests:
 
 - `vllm-scaledobject.yaml` — vLLM inference with scale-to-zero
 - `vllm-queue-depth-scaledobject.yaml` — vLLM queue depth scaling via the engine API
+- `triton-queue-wait-scaledobject.yaml` — Triton queue wait time scaling via the engine API
+- `triton-request-rate-scaledobject.yaml` — Triton request rate scaling via the engine API
 - `custom-gpu-utilization.yaml` — raw GPU utilization scaling

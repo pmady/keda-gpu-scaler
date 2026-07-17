@@ -24,6 +24,8 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -898,5 +900,184 @@ func TestVLLMQueueDepthE2E_MissingEndpoint(t *testing.T) {
 	})
 	if err == nil {
 		t.Error("IsActive() with vllm_queue_depth and no vllmEndpoint should return an error")
+	}
+}
+
+// fakeTritonEngine stands in for a Triton server's Prometheus /metrics
+// endpoint, so the triton-queue-wait / triton-request-rate paths can be
+// exercised end-to-end through the real gRPC server without needing an
+// actual Triton deployment (issue #111). The counters are mutable so a test
+// can advance them between two scrapes: unlike vLLM's queue depth (an
+// instantaneous gauge), Triton's nv_inference_count and
+// nv_inference_queue_duration_us are cumulative, so request rate / average
+// queue wait are derived by pkg/triton from two consecutive scrapes.
+func fakeTritonEngine(t *testing.T, inferenceCount, queueDurationUs *int64) (string, func()) {
+	t.Helper()
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		body := "nv_inference_count " + strconv.FormatInt(atomic.LoadInt64(inferenceCount), 10) + "\n" +
+			"nv_inference_queue_duration_us " + strconv.FormatInt(atomic.LoadInt64(queueDurationUs), 10) + "\n"
+		_, _ = w.Write([]byte(body))
+	}))
+	return ts.URL, ts.Close
+}
+
+// End-to-end coverage for Triton's inference request rate (issue #111): a
+// real gRPC server backed by GPUExternalScaler scrapes a fake Triton metrics
+// endpoint twice (the metric is a derived rate, so it needs two samples) and
+// reports it through IsActive / GetMetricSpec / GetMetrics, exactly as KEDA
+// would consume it.
+func TestTritonRequestRateE2E(t *testing.T) {
+	var inferenceCount int64 = 200
+	var queueDurationUs int64 = 8000
+	tritonURL, tritonCleanup := fakeTritonEngine(t, &inferenceCount, &queueDurationUs)
+	defer tritonCleanup()
+
+	devices := []gpu.Metrics{{Index: 0, GPUUtilization: 10}}
+	addr, cleanup := startTestServer(t, devices)
+	defer cleanup()
+
+	conn, client := dialScaler(t, addr)
+	defer conn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	metadata := map[string]string{
+		"profile":        "triton-request-rate",
+		"tritonEndpoint": tritonURL,
+	}
+	ref := &pb.ScaledObjectRef{
+		Name:           "triton-e2e-test",
+		Namespace:      "ai-workloads",
+		ScalerMetadata: metadata,
+	}
+
+	specResp, err := client.GetMetricSpec(ctx, ref)
+	if err != nil {
+		t.Fatalf("GetMetricSpec failed: %v", err)
+	}
+	if len(specResp.MetricSpecs) != 1 || specResp.MetricSpecs[0].MetricName != "keda_gpu_triton_request_rate" {
+		t.Fatalf("GetMetricSpec = %+v, want metric name keda_gpu_triton_request_rate", specResp.MetricSpecs)
+	}
+
+	// First scrape only establishes the baseline sample; the rate is 0 until
+	// a second scrape lets the scaler diff against it.
+	firstResp, err := client.GetMetrics(ctx, &pb.GetMetricsRequest{
+		ScaledObjectRef: ref,
+		MetricName:      specResp.MetricSpecs[0].MetricName,
+	})
+	if err != nil {
+		t.Fatalf("GetMetrics (first scrape) failed: %v", err)
+	}
+	if got := firstResp.MetricValues[0].MetricValueFloat; got != 0 {
+		t.Errorf("first-scrape request rate = %v, want 0 (no baseline yet)", got)
+	}
+
+	// Advance Triton's cumulative counter, as if 100 more inferences ran.
+	atomic.AddInt64(&inferenceCount, 100)
+
+	secondResp, err := client.GetMetrics(ctx, &pb.GetMetricsRequest{
+		ScaledObjectRef: ref,
+		MetricName:      specResp.MetricSpecs[0].MetricName,
+	})
+	if err != nil {
+		t.Fatalf("GetMetrics (second scrape) failed: %v", err)
+	}
+	if got := secondResp.MetricValues[0].MetricValueFloat; got <= 0 {
+		t.Errorf("second-scrape request rate = %v, want > 0 (100 more inferences since last scrape)", got)
+	}
+
+	// IsActive triggers its own scrape (the third against this endpoint), so
+	// it needs its own fresh delta since the previous scrape reset the
+	// baseline to the current counter value — otherwise this scrape would
+	// see zero new inferences and report a rate of 0.
+	atomic.AddInt64(&inferenceCount, 100)
+
+	// The profile's activation threshold (1) should now be exceeded.
+	activeResp, err := client.IsActive(ctx, ref)
+	if err != nil {
+		t.Fatalf("IsActive failed: %v", err)
+	}
+	if !activeResp.Result {
+		t.Error("IsActive() = false, want true (request rate should exceed activation threshold 1)")
+	}
+}
+
+// End-to-end coverage for Triton's average inference queue wait time (issue
+// #111), derived the same way as the request-rate metric above but dividing
+// the delta in cumulative queue duration by the delta in inference count
+// instead of by elapsed time.
+func TestTritonQueueWaitE2E(t *testing.T) {
+	var inferenceCount int64 = 200
+	var queueDurationUs int64 = 8000
+	tritonURL, tritonCleanup := fakeTritonEngine(t, &inferenceCount, &queueDurationUs)
+	defer tritonCleanup()
+
+	devices := []gpu.Metrics{{Index: 0, GPUUtilization: 10}}
+	addr, cleanup := startTestServer(t, devices)
+	defer cleanup()
+
+	conn, client := dialScaler(t, addr)
+	defer conn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	metadata := map[string]string{
+		"profile":        "triton-queue-wait",
+		"tritonEndpoint": tritonURL,
+	}
+	ref := &pb.ScaledObjectRef{
+		Name:           "triton-queue-wait-e2e-test",
+		Namespace:      "ai-workloads",
+		ScalerMetadata: metadata,
+	}
+
+	if _, err := client.GetMetrics(ctx, &pb.GetMetricsRequest{
+		ScaledObjectRef: ref,
+		MetricName:      "keda_gpu_triton_queue_wait",
+	}); err != nil {
+		t.Fatalf("GetMetrics (first scrape) failed: %v", err)
+	}
+
+	// 200 more inferences accumulate 20,000us of additional queue time =>
+	// 100us/request average => 0.1ms/request.
+	atomic.AddInt64(&inferenceCount, 200)
+	atomic.AddInt64(&queueDurationUs, 20000)
+
+	resp, err := client.GetMetrics(ctx, &pb.GetMetricsRequest{
+		ScaledObjectRef: ref,
+		MetricName:      "keda_gpu_triton_queue_wait",
+	})
+	if err != nil {
+		t.Fatalf("GetMetrics (second scrape) failed: %v", err)
+	}
+	got := resp.MetricValues[0].MetricValueFloat
+	if got < 0.09 || got > 0.11 {
+		t.Errorf("queue wait = %v ms, want ~0.1 ms (100us/request)", got)
+	}
+}
+
+// A ScaledObject requesting a Triton metric type without tritonEndpoint must
+// fail fast with a clear error rather than silently falling back to NVML.
+func TestTritonQueueWaitE2E_MissingEndpoint(t *testing.T) {
+	devices := []gpu.Metrics{{Index: 0, GPUUtilization: 10}}
+	addr, cleanup := startTestServer(t, devices)
+	defer cleanup()
+
+	conn, client := dialScaler(t, addr)
+	defer conn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err := client.IsActive(ctx, &pb.ScaledObjectRef{
+		Name:           "triton-e2e-missing-endpoint",
+		Namespace:      "ai-workloads",
+		ScalerMetadata: map[string]string{"metricType": "triton_queue_wait_ms"},
+	})
+	if err == nil {
+		t.Error("IsActive() with triton_queue_wait_ms and no tritonEndpoint should return an error")
 	}
 }

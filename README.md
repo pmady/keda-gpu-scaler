@@ -66,9 +66,14 @@ This design is documented in [KEDA issue #7538](https://github.com/kedacore/keda
 | `nvlink_rx_mbps` | NVLink receive throughput (GPU→GPU) | MB/s |
 | `vllm_queue_depth` | Pending requests waiting in the vLLM engine — requires `vllmEndpoint` | count |
 | `vllm_kv_cache_usage` | vLLM GPU KV cache usage — requires `vllmEndpoint` | % (0-100) |
+| `triton_queue_wait_ms` | Average Triton inference queue wait time — requires `tritonEndpoint` | ms |
+| `triton_request_rate` | Triton inference request rate — requires `tritonEndpoint` | requests/sec |
 
 The `vllm_*` metrics come from the vLLM engine's own `/metrics` endpoint
 rather than NVML — see [docs/configuration.md](docs/configuration.md#vllm-engine-metrics).
+The `triton_*` metrics likewise come from Triton's own `/metrics` endpoint
+and are derived from its cumulative counters — see
+[docs/configuration.md](docs/configuration.md#triton-engine-metrics).
 
 ---
 
@@ -81,6 +86,8 @@ Instead of configuring raw metric thresholds, use a profile optimized for your w
 | `vllm-inference` | Memory % | 80 | 5 | vLLM / LLM serving with scale-to-zero |
 | `vllm-queue-depth` | Pending requests | 5 | 1 | vLLM — scale on queue depth via the engine API for faster reaction time |
 | `triton-inference` | GPU Util | 75 | 10 | NVIDIA Triton Inference Server |
+| `triton-queue-wait` | Queue wait (ms) | 50 | 5 | Triton — scale on average inference queue wait time via the engine API |
+| `triton-request-rate` | Requests/sec | 50 | 1 | Triton — scale on inference request rate via the engine API |
 | `training` | GPU Util | 90 | 0 | Training jobs (no scale-to-zero) |
 | `batch` | Memory % | 70 | 1 | Batch inference with aggressive scale-down |
 | `ollama` | Memory % | 70 | 3 | Ollama LLM serving with scale-to-zero |

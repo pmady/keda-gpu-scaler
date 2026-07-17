@@ -78,6 +78,20 @@ func TestGetBuiltinProfiles(t *testing.T) {
 			wantTarget: 75,
 		},
 		{
+			name:       "triton-queue-wait exists",
+			profile:    "triton-queue-wait",
+			wantFound:  true,
+			wantMetric: MetricTritonQueueWaitMs,
+			wantTarget: 50,
+		},
+		{
+			name:       "triton-request-rate exists",
+			profile:    "triton-request-rate",
+			wantFound:  true,
+			wantMetric: MetricTritonRequestRate,
+			wantTarget: 50,
+		},
+		{
 			name:      "unknown profile not found",
 			profile:   "nonexistent",
 			wantFound: false,
@@ -112,14 +126,16 @@ func TestGetBuiltinProfiles(t *testing.T) {
 
 func TestList(t *testing.T) {
 	names := List()
-	if len(names) != 8 {
-		t.Errorf("List() returned %d profiles, want 8", len(names))
+	if len(names) != 10 {
+		t.Errorf("List() returned %d profiles, want 10", len(names))
 	}
 
 	expected := map[string]bool{
 		"vllm-inference":       false,
 		"vllm-queue-depth":     false,
 		"triton-inference":     false,
+		"triton-queue-wait":    false,
+		"triton-request-rate":  false,
 		"training":             false,
 		"batch":                false,
 		"distributed-training": false,
@@ -182,6 +198,19 @@ func TestIsVLLMMetric(t *testing.T) {
 	for _, mt := range []MetricType{MetricGPUUtilization, MetricMemoryUsedPercent, MetricTemperature, "", "unknown"} {
 		if IsVLLMMetric(mt) {
 			t.Errorf("IsVLLMMetric(%q) = true, want false", mt)
+		}
+	}
+}
+
+func TestIsTritonMetric(t *testing.T) {
+	for _, mt := range []MetricType{MetricTritonQueueWaitMs, MetricTritonRequestRate} {
+		if !IsTritonMetric(mt) {
+			t.Errorf("IsTritonMetric(%q) = false, want true", mt)
+		}
+	}
+	for _, mt := range []MetricType{MetricGPUUtilization, MetricVLLMQueueDepth, MetricMemoryUsedPercent, "", "unknown"} {
+		if IsTritonMetric(mt) {
+			t.Errorf("IsTritonMetric(%q) = true, want false", mt)
 		}
 	}
 }

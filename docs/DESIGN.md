@@ -79,6 +79,8 @@ Raw metric thresholds are error-prone if you don't know what "80% GPU utilizatio
 | `vllm-inference` | LLM serving. Scales on VRAM pressure (80%) because vLLM pre-allocates KV cache. Activation threshold at 5% for scale-to-zero. |
 | `vllm-queue-depth` | LLM serving. Scales on pending requests (target 5) read from the vLLM engine API — faster reaction than waiting for VRAM/utilization to move. Activation at 1 request. |
 | `triton-inference` | Multi-model serving. Scales on SM utilization (75%) because Triton shares GPU across models. Higher activation (10%) to avoid flapping. |
+| `triton-queue-wait` | Multi-model serving. Scales on average inference queue wait time (target 50ms) read from Triton's engine API — a more direct overload signal than GPU utilization. Activation at 5ms. |
+| `triton-request-rate` | Multi-model serving. Scales on inference throughput (target 50 req/s) read from Triton's engine API. Activation at 1 req/s. |
 | `training` | Batch training. Scales on SM utilization (90%) with no scale-to-zero (activation 0) to avoid killing checkpoints. |
 | `batch` | Offline batch inference. Aggressive scale-down with 70% memory threshold and low activation (1%). |
 
@@ -177,8 +179,17 @@ GPU utilization and VRAM are proxies for load on a vLLM server — they say the 
 
 Because this bypasses NVML entirely, it needs no GPU driver access — only HTTP reachability from the scaler DaemonSet pods to the vLLM Service. See `docs/configuration.md#vllm-engine-metrics` for usage.
 
+## Triton Engine Metrics (`pkg/triton`)
+
+The same proxy problem applies to Triton: `triton-inference`'s GPU utilization tells you the GPU is busy, not whether inference requests are backing up. Triton exposes that directly via its own Prometheus `/metrics` endpoint (default port `8002`), so `pkg/triton.Client` scrapes it instead of routing through NVML.
+
+Unlike vLLM's `vllm:num_requests_waiting` (an instantaneous gauge), the Triton metrics we need — `nv_inference_queue_duration_us` and `nv_inference_count` — are **cumulative counters** that only increase over the life of the server. A single scrape can't turn a running total into "requests/sec" or "average wait per request"; that requires two samples. `pkg/triton.Client` is therefore stateful: each `Scrape()` call parses the current counter values, diffs them against the previous scrape of that same `Client` (protected by a mutex), and derives `AvgQueueWaitUs` (Δqueue_duration_us / Δinference_count) and `RequestRatePerSec` (Δinference_count / Δtime). Both derived fields are `0` on a client's first scrape of an endpoint, and also fall back to `0` if the delta is negative (e.g. Triton restarted and its counters reset), rather than report a meaningless negative rate. `parseMetrics` sums each counter across all label combinations first, since Triton emits one series per loaded model.
+
+`getTritonMetricValue` in `pkg/scaler` maps `triton_queue_wait_ms` (normalized from microseconds) and `triton_request_rate` to these derived fields, and `parseMetadata` requires `tritonEndpoint` whenever the requested `metricType` is one of them. As with vLLM, the scaler caches one `pkg/triton.Client` per distinct endpoint — this caching is what makes the derived metrics work at all, since a fresh client on every poll would never have a previous sample to diff against. See `docs/configuration.md#triton-engine-metrics` for usage.
+
 ## Future Work
 
 - **AMD ROCm support**: Same DaemonSet pattern, different hardware library (`rocm-smi`)
 - **NVLink topology**: Prefer scaling on nodes with direct GPU-to-GPU interconnect
 - ~~**vLLM queue depth**: Read pending request count directly from vLLM's engine API for more precise scaling~~ — implemented as `pkg/vllm` (see above); see `docs/configuration.md#vllm-engine-metrics`
+- ~~**Triton queue wait / request rate**: Read scheduling queue time and throughput directly from Triton's engine API for more precise scaling~~ — implemented as `pkg/triton` (see above); see `docs/configuration.md#triton-engine-metrics`
