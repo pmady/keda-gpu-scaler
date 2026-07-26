@@ -38,7 +38,7 @@ jobs:
       TF_VAR_scaler_image_repository: ${{ vars.AWS_E2E_SCALER_IMAGE_REPOSITORY || 'ghcr.io/pmady/keda-gpu-scaler' }}
       TF_VAR_helm_timeout: ${{ vars.AWS_E2E_HELM_TIMEOUT || '600' }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -223,7 +223,7 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -415,7 +415,7 @@ jobs:
       TF_VAR_scaler_image_repository: ${{ vars.GCP_E2E_SCALER_IMAGE_REPOSITORY || 'ghcr.io/pmady/keda-gpu-scaler' }}
       TF_VAR_helm_timeout: ${{ vars.GCP_E2E_HELM_TIMEOUT || '1800' }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
