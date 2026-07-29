@@ -17,7 +17,7 @@ COPY . .
 RUN CGO_ENABLED=1 GOOS=linux go build -o /keda-gpu-scaler ./cmd/keda-gpu-scaler/
 
 # Runtime stage — uses NVIDIA base image for libnvidia-ml.so
-FROM nvidia/cuda:13.3.0-base-ubuntu24.04
+FROM nvidia/cuda:13.3.1-base-ubuntu24.04
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
