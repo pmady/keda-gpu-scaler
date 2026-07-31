@@ -1,0 +1,27 @@
+# Example ScaledObject for a workload on MIG-enabled GPU nodes.
+#
+# The scaler auto-discovers MIG compute instances. Omitting gpuIndex aggregates
+# all discovered instances; adjust aggregation and thresholds for your layout.
+#
+# Usage:
+#   kubectl apply -f deploy/helm/keda-gpu-scaler/examples/mig-scaledobject.yaml
+#
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: mig-workload-scaler
+spec:
+  scaleTargetRef:
+    name: mig-workload
+  minReplicaCount: 1
+  maxReplicaCount: 14
+  pollingInterval: 30
+  cooldownPeriod: 120
+  triggers:
+    - type: external
+      metadata:
+        scalerAddress: "keda-gpu-scaler.keda.svc.cluster.local:6000"
+        metricType: "gpu_utilization"
+        targetValue: "75"
+        activationThreshold: "10"
+        aggregation: "avg"

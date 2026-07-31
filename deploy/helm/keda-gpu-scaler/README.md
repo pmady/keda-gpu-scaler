@@ -59,6 +59,29 @@ metrics endpoint rather than GPU utilization/memory, and requires a
 `http://vllm-deployment:8000/metrics`) — see the repo's
 `docs/configuration.md#vllm-engine-metrics`.
 
+### Required and optional configuration
+
+The chart has no required value overrides for clusters whose GPU nodes expose
+the `nvidia` RuntimeClass. Common environment-specific overrides are:
+
+- `runtimeClassName`: set to `""` when the cluster has no NVIDIA RuntimeClass.
+- `nvmlHostMounts.enabled`: enable when NVML must be mounted from the host.
+- `imagePullSecrets`: set when pulling the image through a private registry.
+- `nodeSelector` and `tolerations`: adjust when GPU nodes use custom labels or
+  taints.
+
+Scaling profiles are not Helm values. Add a `profile` to the KEDA
+`ScaledObject` trigger metadata after installing the chart.
+
+### Scaling examples
+
+- [`examples/scaledobject.yaml`](examples/scaledobject.yaml): vLLM inference
+  with scale-to-zero.
+- [`examples/training-scaledobject.yaml`](examples/training-scaledobject.yaml):
+  training workers using the `training` profile and average GPU utilization.
+- [`examples/mig-scaledobject.yaml`](examples/mig-scaledobject.yaml): MIG-enabled
+  nodes using automatic instance discovery and aggregation.
+
 ## Parameters
 
 ### Image

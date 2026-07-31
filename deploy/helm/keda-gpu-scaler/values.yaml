@@ -1,6 +1,9 @@
 # Default values for keda-gpu-scaler.
 # Each parameter is documented with a "# --" comment; the same descriptions are
 # rendered in the chart README's parameters table (deploy/helm/keda-gpu-scaler/README.md).
+# No overrides are required for a standard NVIDIA GPU node with the `nvidia`
+# RuntimeClass. Scaling profiles belong in KEDA ScaledObject trigger metadata,
+# not in this file; see the chart README and examples/ directory.
 
 # Container image for the scaler DaemonSet.
 image:

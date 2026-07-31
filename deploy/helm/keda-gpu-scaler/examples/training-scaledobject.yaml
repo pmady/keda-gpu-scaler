@@ -1,0 +1,25 @@
+# Example ScaledObject for a GPU training Deployment.
+#
+# The training profile targets high GPU utilization and does not activate
+# scale-to-zero. Update scaleTargetRef and scalerAddress for your cluster.
+#
+# Usage:
+#   kubectl apply -f deploy/helm/keda-gpu-scaler/examples/training-scaledobject.yaml
+#
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: gpu-training-scaler
+spec:
+  scaleTargetRef:
+    name: training-worker
+  minReplicaCount: 1
+  maxReplicaCount: 16
+  pollingInterval: 30
+  cooldownPeriod: 300
+  triggers:
+    - type: external
+      metadata:
+        scalerAddress: "keda-gpu-scaler.keda.svc.cluster.local:6000"
+        profile: "training"
+        aggregation: "avg"
