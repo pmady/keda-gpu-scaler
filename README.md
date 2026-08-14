@@ -184,6 +184,7 @@ triggers:
       activationThreshold: "10"
       gpuIndex: "0"              # specific GPU index, or omit for all
       aggregation: "max"         # max, min, avg, sum, p95, p99 across GPUs
+      cooldownSeconds: "120"    # suppress repeat scale-downs; 0 disables
 ```
 
 See `deploy/examples/` for ready-to-use ScaledObject manifests.
@@ -203,6 +204,7 @@ See `deploy/examples/` for ready-to-use ScaledObject manifests.
 | `gpuIndex` | Specific GPU index to monitor. Must be `-1` (all GPUs) or `>= 0`; other negative values are rejected | `-1` (all GPUs) |
 | `aggregation` | Multi-GPU aggregation: `max`, `min`, `avg`, `sum`, `p95`, `p99` | `max` |
 | `pollIntervalSeconds` | Metric polling interval | `10` |
+| `cooldownSeconds` | Suppress repeat scale-downs for this many seconds after a scale-down. Scale-up is never delayed. `0` disables | `60` |
 
 ---
 

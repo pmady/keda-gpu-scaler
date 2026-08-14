@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -54,6 +55,7 @@ func TestParseMetadata(t *testing.T) {
 				gpuIndex:            -1,
 				aggregation:         "max",
 				pollIntervalSeconds: 10,
+				cooldownSeconds:     60,
 			},
 		},
 		{
@@ -69,6 +71,7 @@ func TestParseMetadata(t *testing.T) {
 				gpuIndex:            -1,
 				aggregation:         "max",
 				pollIntervalSeconds: 10,
+				cooldownSeconds:     60,
 			},
 		},
 		{
@@ -84,6 +87,7 @@ func TestParseMetadata(t *testing.T) {
 				gpuIndex:            -1,
 				aggregation:         "max",
 				pollIntervalSeconds: 10,
+				cooldownSeconds:     60,
 			},
 		},
 		{
@@ -110,6 +114,7 @@ func TestParseMetadata(t *testing.T) {
 				gpuIndex:            2,
 				aggregation:         "avg",
 				pollIntervalSeconds: 10,
+				cooldownSeconds:     60,
 			},
 		},
 		{
@@ -126,6 +131,7 @@ func TestParseMetadata(t *testing.T) {
 				gpuIndex:            -1,
 				aggregation:         "max",
 				pollIntervalSeconds: 10,
+				cooldownSeconds:     60,
 			},
 		},
 		{
@@ -141,6 +147,7 @@ func TestParseMetadata(t *testing.T) {
 				gpuIndex:            -1,
 				aggregation:         "max",
 				pollIntervalSeconds: 10,
+				cooldownSeconds:     60,
 			},
 		},
 		{
@@ -156,6 +163,7 @@ func TestParseMetadata(t *testing.T) {
 				gpuIndex:            -1,
 				aggregation:         "max",
 				pollIntervalSeconds: 10,
+				cooldownSeconds:     60,
 			},
 		},
 		{
@@ -171,6 +179,7 @@ func TestParseMetadata(t *testing.T) {
 				gpuIndex:            -1,
 				aggregation:         "p95",
 				pollIntervalSeconds: 10,
+				cooldownSeconds:     60,
 			},
 		},
 		{
@@ -186,6 +195,7 @@ func TestParseMetadata(t *testing.T) {
 				gpuIndex:            -1,
 				aggregation:         "p99",
 				pollIntervalSeconds: 10,
+				cooldownSeconds:     60,
 			},
 		},
 		{
@@ -236,6 +246,7 @@ func TestParseMetadata(t *testing.T) {
 				gpuIndex:            -1,
 				aggregation:         "max",
 				pollIntervalSeconds: 10,
+				cooldownSeconds:     60,
 			},
 		},
 		{
@@ -286,6 +297,7 @@ func TestParseMetadata(t *testing.T) {
 				gpuIndex:            -1,
 				aggregation:         "max",
 				pollIntervalSeconds: 10,
+				cooldownSeconds:     60,
 			},
 		},
 		{
@@ -301,6 +313,7 @@ func TestParseMetadata(t *testing.T) {
 				gpuIndex:            0,
 				aggregation:         "max",
 				pollIntervalSeconds: 10,
+				cooldownSeconds:     60,
 			},
 		},
 		{
@@ -316,6 +329,7 @@ func TestParseMetadata(t *testing.T) {
 				gpuIndex:            -1,
 				aggregation:         "max",
 				pollIntervalSeconds: 10,
+				cooldownSeconds:     60,
 			},
 		},
 		{
@@ -331,6 +345,7 @@ func TestParseMetadata(t *testing.T) {
 				gpuIndex:            -1,
 				aggregation:         "max",
 				pollIntervalSeconds: 0,
+				cooldownSeconds:     60,
 			},
 		},
 		{
@@ -347,7 +362,46 @@ func TestParseMetadata(t *testing.T) {
 				gpuIndex:            -1,
 				aggregation:         "max",
 				pollIntervalSeconds: 10,
+				cooldownSeconds:     60,
 			},
+		},
+		{
+			name:     "explicit cooldownSeconds",
+			metadata: map[string]string{"cooldownSeconds": "120"},
+			want: scalerConfig{
+				metricName:          "keda_gpu_metric",
+				metricType:          profiles.MetricGPUUtilization,
+				targetValue:         80,
+				activationThreshold: 0,
+				gpuIndex:            -1,
+				aggregation:         "max",
+				pollIntervalSeconds: 10,
+				cooldownSeconds:     120,
+			},
+		},
+		{
+			name:     "cooldownSeconds zero disables cooldown",
+			metadata: map[string]string{"cooldownSeconds": "0"},
+			want: scalerConfig{
+				metricName:          "keda_gpu_metric",
+				metricType:          profiles.MetricGPUUtilization,
+				targetValue:         80,
+				activationThreshold: 0,
+				gpuIndex:            -1,
+				aggregation:         "max",
+				pollIntervalSeconds: 10,
+				cooldownSeconds:     0,
+			},
+		},
+		{
+			name:     "invalid cooldownSeconds",
+			metadata: map[string]string{"cooldownSeconds": "abc"},
+			wantErr:  true,
+		},
+		{
+			name:     "negative cooldownSeconds rejected",
+			metadata: map[string]string{"cooldownSeconds": "-5"},
+			wantErr:  true,
 		},
 	}
 
@@ -381,6 +435,9 @@ func TestParseMetadata(t *testing.T) {
 			}
 			if got.pollIntervalSeconds != tt.want.pollIntervalSeconds {
 				t.Errorf("pollIntervalSeconds = %v, want %v", got.pollIntervalSeconds, tt.want.pollIntervalSeconds)
+			}
+			if got.cooldownSeconds != tt.want.cooldownSeconds {
+				t.Errorf("cooldownSeconds = %v, want %v", got.cooldownSeconds, tt.want.cooldownSeconds)
 			}
 		})
 	}
@@ -1721,4 +1778,149 @@ func TestValidateVLLMEndpoint(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestApplyCooldown(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	key := cooldownKey{namespace: "ns", name: "obj"}
+
+	type step struct {
+		offset time.Duration //from base
+		value  float64
+		want   float64
+	}
+
+	tests := []struct {
+		name     string
+		cooldown time.Duration
+		steps    []step
+	}{
+		{
+			name:     "zero cooldown disable suppression",
+			cooldown: 0,
+			steps: []step{
+				{0, 90, 90},
+				{time.Second, 40, 40},
+			},
+		},
+		{
+			name:     "scale-up always passed through",
+			cooldown: 60 * time.Second,
+			steps: []step{
+				{0, 50, 50},
+				{time.Second, 90, 90},
+				{2 * time.Second, 95, 95},
+			},
+		},
+		{
+			name:     "second scale-down inside window is suppressed",
+			cooldown: 60 * time.Second,
+			steps: []step{
+				{0, 90, 90},
+				{10 * time.Second, 70, 70}, // first drop: this is allowed, starts the clock
+				{20 * time.Second, 50, 70}, // inside window: suppressed to 70
+				{80 * time.Second, 50, 50}, // outside window: allowed
+			},
+		},
+		{
+			name:     "scale-up during cooldown is passed through",
+			cooldown: 60 * time.Second,
+			steps: []step{
+				{0, 90, 90},
+				{10 * time.Second, 70, 70}, // first drop: this is allowed, starts the clock
+				{20 * time.Second, 95, 95}, // inside window: scale-up is allowed
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := NewGPUExternalScaler(nil, zap.NewNop())
+			var clock time.Time
+			s.now = func() time.Time { return clock }
+
+			for i, st := range tt.steps {
+				clock = base.Add(st.offset)
+				got := s.applyCooldown(key, st.value, tt.cooldown)
+				if got != st.want {
+					t.Errorf("step %d: applyCooldown() = %v, want %v", i, got, st.want)
+				}
+			}
+		})
+	}
+}
+
+func TestApplyCooldownIsolatesTriggers(t *testing.T) {
+	s := NewGPUExternalScaler(nil, zap.NewNop())
+	s.now = func() time.Time { return time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC) }
+
+	gpuUtil := cooldownKey{namespace: "ns", name: "so", metricType: profiles.MetricGPUUtilization}
+	queue := cooldownKey{namespace: "ns", name: "so", metricType: profiles.MetricVLLMQueueDepth}
+
+	s.applyCooldown(gpuUtil, 90, time.Minute)
+	s.applyCooldown(gpuUtil, 70, time.Minute) // first drop: starts gpuUtil's clock
+
+	if got := s.applyCooldown(queue, 5, time.Minute); got != 5 {
+		t.Errorf("queue trigger = %v, want 5 — must not inherit the gpu_utilization baseline", got)
+	}
+}
+
+func TestGetMetrics_CooldownSuppressesScaleDown(t *testing.T) {
+	mock := gpu.NewMockCollector([]gpu.Metrics{
+		{Index: 0, Name: "A100", GPUUtilization: 90, MemoryTotalMiB: 81920},
+	})
+	s := NewGPUExternalScaler(mock, zap.NewNop())
+
+	clock := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	s.now = func() time.Time { return clock }
+
+	get := func() float64 {
+		t.Helper()
+		resp, err := s.GetMetrics(context.Background(), &pb.GetMetricsRequest{
+			ScaledObjectRef: &pb.ScaledObjectRef{
+				Namespace:      "default",
+				Name:           "test-so",
+				ScalerMetadata: map[string]string{"cooldownSeconds": "60"},
+			},
+		})
+		if err != nil {
+			t.Fatalf("GetMetrics() error = %v", err)
+		}
+		return resp.MetricValues[0].MetricValueFloat
+	}
+
+	if got := get(); got != 90 {
+		t.Fatalf("baseline = %v, want 90", got)
+	}
+
+	mock.Devices[0].GPUUtilization = 70
+	if got := get(); got != 70 {
+		t.Fatalf("first drop = %v, want 70 (allowed, starts the clock)", got)
+	}
+
+	mock.Devices[0].GPUUtilization = 40
+	clock = clock.Add(20 * time.Second)
+	if got := get(); got != 70 {
+		t.Errorf("inside cooldown = %v, want 70 (suppressed)", got)
+	}
+
+	clock = clock.Add(60 * time.Second)
+	if got := get(); got != 40 {
+		t.Errorf("after cooldown = %v, want 40", got)
+	}
+}
+
+func TestApplyCooldownConcurrent(t *testing.T) {
+	s := NewGPUExternalScaler(nil, zap.NewNop())
+	key := cooldownKey{namespace: "ns", name: "obj"}
+
+	var wg sync.WaitGroup
+	for i := 0; i < 50; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			s.applyCooldown(key, float64(i), 60*time.Second)
+		}(i)
+	}
+	wg.Wait()
 }

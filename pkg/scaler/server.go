@@ -25,6 +25,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
@@ -43,6 +44,10 @@ type GPUExternalScaler struct {
 	vllmClients   map[string]*vllm.Client   // keyed by endpoint URL
 	tritonClients map[string]*triton.Client // keyed by endpoint URL
 	logger        *zap.Logger
+
+	mu        sync.Mutex                     // guards cooldowns
+	cooldowns map[cooldownKey]*cooldownState // keyed by ScaledObject + metric config
+	now       func() time.Time               // for testing; defaults to time.Now
 }
 
 // NewGPUExternalScaler creates a new GPU external scaler server.
@@ -52,6 +57,8 @@ func NewGPUExternalScaler(collector gpu.MetricsCollector, logger *zap.Logger) *G
 		vllmClients:   make(map[string]*vllm.Client),
 		tritonClients: make(map[string]*triton.Client),
 		logger:        logger,
+		cooldowns:     make(map[cooldownKey]*cooldownState),
+		now:           time.Now,
 	}
 }
 
@@ -125,6 +132,9 @@ func (s *GPUExternalScaler) GetMetrics(ctx context.Context, req *pb.GetMetricsRe
 		return nil, fmt.Errorf("failed to get metric value: %w", err)
 	}
 
+	key := newCooldownKey(req.ScaledObjectRef, cfg)
+	value = s.applyCooldown(key, value, time.Duration(cfg.cooldownSeconds)*time.Second)
+
 	return &pb.GetMetricsResponse{
 		MetricValues: []*pb.MetricValue{
 			{
@@ -135,6 +145,51 @@ func (s *GPUExternalScaler) GetMetrics(ctx context.Context, req *pb.GetMetricsRe
 	}, nil
 }
 
+// cooldownKey identifies one metric series. A ScaledObject may declare several
+// external triggers, each calling GetMetrics with the same Name/Namespace but
+// its own metadata, so the key has to include every config field that affects
+// the computed value — otherwise unrelated triggers (potentially in different
+// units) would share and corrupt a single baseline.
+type cooldownKey struct {
+	namespace      string
+	name           string
+	metricName     string
+	metricType     profiles.MetricType
+	aggregation    string
+	gpuIndex       int
+	vllmEndpoint   string
+	tritonEndpoint string
+}
+
+func newCooldownKey(ref *pb.ScaledObjectRef, cfg scalerConfig) cooldownKey {
+	return cooldownKey{
+		namespace:      ref.Namespace,
+		name:           ref.Name,
+		metricName:     cfg.metricName,
+		metricType:     cfg.metricType,
+		aggregation:    cfg.aggregation,
+		gpuIndex:       cfg.gpuIndex,
+		vllmEndpoint:   cfg.vllmEndpoint,
+		tritonEndpoint: cfg.tritonEndpoint,
+	}
+}
+
+// String renders the key for logs. metricName defaults to "keda_gpu_metric" for
+// every trigger, so the rest of the config is what distinguishes two triggers on
+// the same ScaledObject.
+func (k cooldownKey) String() string {
+	return fmt.Sprintf("%s/%s[%s %s %s gpu=%d vllm=%s triton=%s]",
+		k.namespace, k.name, k.metricName, k.metricType, k.aggregation,
+		k.gpuIndex, k.vllmEndpoint, k.tritonEndpoint)
+}
+
+// cooldownState tracks the most recently reported value for one metric series,
+// plus when we last let a scale-down through.
+type cooldownState struct {
+	lastValue       float64
+	lastScaleDownAt time.Time
+}
+
 type scalerConfig struct {
 	metricName          string
 	metricType          profiles.MetricType
@@ -143,6 +198,7 @@ type scalerConfig struct {
 	gpuIndex            int // -1 means aggregate all GPUs
 	aggregation         string
 	pollIntervalSeconds int
+	cooldownSeconds     int    // suppress repeated scale-downs for this many seconds
 	vllmEndpoint        string // e.g. "http://vllm-svc:8000/metrics"
 	tritonEndpoint      string // e.g. "http://triton-svc:8002/metrics"
 }
@@ -155,6 +211,7 @@ func parseMetadata(metadata map[string]string) (scalerConfig, error) {
 		activationThreshold: 0,
 		gpuIndex:            -1,
 		aggregation:         "max",
+		cooldownSeconds:     60,
 		pollIntervalSeconds: 10,
 	}
 
@@ -227,6 +284,16 @@ func parseMetadata(metadata map[string]string) (scalerConfig, error) {
 			return cfg, fmt.Errorf("invalid aggregation %q: must be max, min, avg, sum, p95, or p99", v)
 		}
 	}
+	if v, ok := metadata["cooldownSeconds"]; ok {
+		i, err := strconv.Atoi(v)
+		if err != nil {
+			return cfg, fmt.Errorf("invalid cooldownSeconds %q: %w", v, err)
+		}
+		if i < 0 {
+			return cfg, fmt.Errorf("invalid cooldownSeconds %d: it must be >= 0", i)
+		}
+		cfg.cooldownSeconds = i
+	}
 	if v, ok := metadata["pollIntervalSeconds"]; ok {
 		i, err := strconv.Atoi(v)
 		if err != nil {
@@ -262,6 +329,49 @@ func parseMetadata(metadata map[string]string) (scalerConfig, error) {
 	}
 
 	return cfg, nil
+}
+
+// applyCooldown returns the value that should be reported to KEDA for this
+// metric series. A rising value is always reported immediately. A falling
+// value is reported only if no scale-down has been reported within the last
+// cooldown window; otherwise the previous, higher value is repeated so the
+// HPA sees no reason to shrink.
+func (s *GPUExternalScaler) applyCooldown(key cooldownKey, value float64, cooldown time.Duration) float64 {
+	if cooldown <= 0 {
+		return value
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	st, ok := s.cooldowns[key]
+	if !ok {
+		// metric series has never been seen before, so no cooldown is active yet
+		s.cooldowns[key] = &cooldownState{lastValue: value}
+		return value
+	}
+
+	if value >= st.lastValue {
+		// Metric is rising: report immediately and raise the baseline
+		st.lastValue = value
+		return value
+	}
+
+	now := s.now()
+	if !st.lastScaleDownAt.IsZero() && now.Sub(st.lastScaleDownAt) < cooldown {
+		s.logger.Info("cooldown active, suppressing scale-down",
+			zap.Stringer("metric_series", key),
+			zap.Float64("reported_value", st.lastValue),
+			zap.Float64("current_value", value),
+			zap.Duration("remaining", cooldown-now.Sub(st.lastScaleDownAt)),
+		)
+		return st.lastValue
+	}
+
+	// Cooldown has expired, so allow the scale-down and reset the cooldown timer.
+	st.lastValue = value
+	st.lastScaleDownAt = now
+	return value
 }
 
 // getVLLMClient returns a cached vLLM client for the given endpoint, creating
