@@ -481,6 +481,8 @@ per cloud) are documented in **[`tests/terratest/README.md`](tests/terratest/REA
 
 ## Related
 
+- [VKTR: Why Kubernetes Can't See Your GPUs — and What We Built to Fix It](https://www.vktr.com/ai-technology/why-kubernetes-cant-see-your-gpus-and-what-we-built-to-fix-it/)
+- [Techstrong.ai: Your AI Agent Can't See Your GPUs — Here's How to Fix That](https://techstrong.ai/features/your-ai-agent-cant-see-your-gpus-heres-how-to-fix-that/)
 - [CNCF Blog: GPU Autoscaling on Kubernetes with KEDA](https://www.cncf.io/blog/2026/05/27/gpu-autoscaling-on-kubernetes-with-keda-building-an-external-scaler/)
 - [KEDA issue #7538](https://github.com/kedacore/keda/issues/7538) — original discussion
 - [CNCF TOC initiative #2188](https://github.com/cncf/toc/issues/2188) — whitepaper proposal
