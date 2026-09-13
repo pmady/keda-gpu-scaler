@@ -189,6 +189,7 @@ Unlike vLLM's `vllm:num_requests_waiting` (an instantaneous gauge), the Triton m
 
 ## Future Work
 
+- **Multi-node aggregation**: Aggregate GPU metrics across all GPU nodes for cluster-wide scaling via an agent/aggregator split (see [Design: Multi-Node GPU Metric Aggregation](design-multi-node-aggregation.md))
 - **AMD ROCm support**: Same DaemonSet pattern, different hardware library (`rocm-smi`)
 - **NVLink topology**: Prefer scaling on nodes with direct GPU-to-GPU interconnect
 - ~~**vLLM queue depth**: Read pending request count directly from vLLM's engine API for more precise scaling~~ — implemented as `pkg/vllm` (see above); see `docs/configuration.md#vllm-engine-metrics`
