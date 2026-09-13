@@ -32,6 +32,7 @@ nav:
   - Home: index.md
   - Getting Started: getting-started.md
   - Architecture: DESIGN.md
+  - Design - Multi-Node Aggregation: design-multi-node-aggregation.md
   - Configuration: configuration.md
   - HPC Integration: hpc.md
   - Demo: demo-script.md
