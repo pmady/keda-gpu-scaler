@@ -81,9 +81,9 @@ func main() {
 		)
 	}
 
-	collector, err := gpu.NewCollector(logger)
+	collector, err := gpu.NewDetectedCollector(logger)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "nvml init failed: %v\n", err)
+		fmt.Fprintf(os.Stderr, "gpu collector init failed: %v\n", err)
 		os.Exit(1)
 	}
 	defer func() { _ = collector.Close() }()

@@ -23,7 +23,8 @@ import (
 
 // MockCollector is a test double for MetricsCollector.
 type MockCollector struct {
-	Devices []Metrics
+	Devices   []Metrics
+	DriverVer string
 
 	mu sync.RWMutex
 	// deviceCountErr, when set via SetDeviceCountErr, is returned by
@@ -78,4 +79,8 @@ func (m *MockCollector) DeviceCount() (int, error) {
 
 func (m *MockCollector) Close() error {
 	return nil
+}
+
+func (m *MockCollector) DriverVersion() string {
+	return m.DriverVer
 }

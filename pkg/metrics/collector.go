@@ -89,6 +89,10 @@ func (ic *InstrumentedCollector) Close() error {
 	return ic.inner.Close()
 }
 
+func (ic *InstrumentedCollector) DriverVersion() string {
+	return ic.inner.DriverVersion()
+}
+
 func recordGauges(m gpu.Metrics) {
 	idx := fmt.Sprintf("%d", m.Index)
 	GPUUtilization.WithLabelValues(idx, m.UUID, m.Name).Set(float64(m.GPUUtilization))

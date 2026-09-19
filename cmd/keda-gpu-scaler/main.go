@@ -95,22 +95,21 @@ func main() {
 		logger.Info("Probe server disabled (probe-port=0)")
 	}
 
-	// Initialize NVML GPU collector
-	collector, err := gpu.NewCollector(logger)
+	// Initialize GPU collector (vendor auto-detected)
+	metricsCollector, err := gpu.NewDetectedCollector(logger)
 	if err != nil {
 		logger.Fatal("Failed to initialize GPU collector", zap.Error(err))
 	}
 	defer func() {
-		if closeErr := collector.Close(); closeErr != nil {
+		if closeErr := metricsCollector.Close(); closeErr != nil {
 			logger.Warn("Failed to close GPU collector", zap.Error(closeErr))
 		}
 	}()
 
 	// Wrap with prometheus instrumentation if enabled
-	var metricsCollector gpu.MetricsCollector = collector
 	if *metricsPort > 0 {
 		metrics.Register(prometheus.DefaultRegisterer)
-		metricsCollector = metrics.Wrap(collector)
+		metricsCollector = metrics.Wrap(metricsCollector)
 
 		mux := http.NewServeMux()
 		mux.Handle("/metrics", promhttp.Handler())

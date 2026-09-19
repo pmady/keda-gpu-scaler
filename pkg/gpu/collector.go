@@ -24,5 +24,6 @@ type MetricsCollector interface {
 	// CollectByUUID collects metrics for a device by UUID (standard or MIG).
 	CollectByUUID(uuid string) (Metrics, error)
 	DeviceCount() (int, error)
+	DriverVersion() string
 	Close() error
 }
