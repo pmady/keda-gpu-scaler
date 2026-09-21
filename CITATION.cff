@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: "If you use this software in your research, please cite it as below."
+title: "keda-gpu-scaler: GPU-aware autoscaling for Kubernetes from real hardware metrics"
+authors:
+  - family-names: "Madduri"
+    given-names: "Pavan"
+type: software
+version: 0.6.0
+date-released: 2026-07-17
+license: Apache-2.0
+url: "https://github.com/pmady/keda-gpu-scaler"
+repository-code: "https://github.com/pmady/keda-gpu-scaler"
+keywords:
+  - kubernetes
+  - keda
+  - autoscaling
+  - gpu
+  - nvml
+  - nvidia
