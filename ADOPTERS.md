@@ -8,7 +8,7 @@ Using this project? Open a PR to add yourself. It helps us prioritize features a
 
 | Organization | Use Case | GPU Hardware | Since |
 |-------------|----------|-------------|-------|
-| Fortune 500 Industrial Distributor | vLLM inference autoscaling for internal AI platform | A100 80GB (4-node cluster) | 2026-03 |
+| *Your org here* | | | |
 
 ## Evaluation / Testing
 

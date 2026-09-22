@@ -142,8 +142,8 @@ Claude (Anthropic) was used to assist with drafting documentation and this
 paper. All code, design decisions, architectural choices, and paper content were
 reviewed, validated, and edited by the human author. The core design, a
 DaemonSet with direct NVML access behind KEDA's external-scaler gRPC contract,
-was conceived and implemented by the author based on production experience with
-GPU inference workloads.
+was conceived and implemented by the author based on experience operating GPU
+inference workloads on Kubernetes.
 
 # Acknowledgements
 
