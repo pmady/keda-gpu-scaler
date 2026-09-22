@@ -239,15 +239,14 @@ DCGM $\rightarrow$ Prometheus $\rightarrow$ KEDA & 10--20~s & 4 \\
 \end{table}
 
 \subsection{Production observations}
-We have run \texttt{keda-gpu-scaler} on a four-node GPU cluster (8$\times$A100
-80\,GB per node, on Amazon EKS) serving LLM inference with vLLM (Llama~3 70B,
-4-bit quantized). We observed the following. First, device memory is the right
+We have run \texttt{keda-gpu-scaler} on a multi-node A100 cluster serving LLM
+inference with vLLM. We observed the following. First, device memory is the right
 signal for vLLM: SM utilization stayed near 60--70\% even under heavy load
 because vLLM batches requests, whereas VRAM pressure tracked request-queue depth
 closely, with latency spiking within seconds once the KV cache filled past
 roughly 80\%. Second, scale-to-zero produced meaningful savings: development and
-staging endpoints sat idle more than 18 hours per day, and releasing those GPUs
-reduced non-production GPU spend by roughly 60\%. Third, the short poll interval
+staging endpoints sat idle for most of each day, and releasing those GPUs cut
+non-production GPU spend substantially. Third, the short poll interval
 mattered: with the Prometheus pipeline a traffic burst could saturate GPUs for
 15--30~s before a new pod scheduled, whereas direct NVML surfaced the spike within
 one poll cycle. Fourth, the best aggregation strategy is workload-dependent:

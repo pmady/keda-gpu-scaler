@@ -101,9 +101,7 @@ saturation with request-queue pressure in a single `ScaledObject`.
 
 # Research impact statement
 
-The project's `ADOPTERS.md` lists one production deployment, autoscaling vLLM
-inference on a four-node A100 cluster since March 2026. The design was
-described in a CNCF blog post on building a GPU external scaler for KEDA
+The design was described in a CNCF blog post on building a GPU external scaler for KEDA
 [@cncfblog] and covered in articles in VKTR [@vktr] and Techstrong.ai
 [@techstrong], and the project is discussed in an IEEE Communications Society
 Technology Blog article on scaling agentic AI in telecom networks [@comsocblog].
