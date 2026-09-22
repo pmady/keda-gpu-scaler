@@ -5,6 +5,7 @@
 [![CI](https://github.com/pmady/keda-gpu-scaler/actions/workflows/ci.yaml/badge.svg)](https://github.com/pmady/keda-gpu-scaler/actions/workflows/ci.yaml)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22866676.svg)](https://doi.org/10.5281/zenodo.22866676)
+[![status](https://joss.theoj.org/papers/7c29ae0d55138f3c2dce225378d7a600/status.svg)](https://joss.theoj.org/papers/7c29ae0d55138f3c2dce225378d7a600)
 
 A [KEDA External Scaler](https://keda.sh/docs/latest/concepts/external-scalers/) that reads NVIDIA GPU metrics directly from NVML C-bindings and autoscales your vLLM, Triton, and custom inference deployments including scale-to-zero.
 
