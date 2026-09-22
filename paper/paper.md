@@ -51,7 +51,7 @@ model serving and other GPU inference workloads, where operators need to scale
 on GPU utilization or on serving-engine backpressure, and where scale-to-zero
 meaningfully reduces cost. The project targets platform and machine learning
 infrastructure engineers who run GPU workloads on Kubernetes and want autoscaling
-that reflects what the accelerator is actually doing.
+that reflects what the accelerator is doing.
 
 # State of the field
 
@@ -91,7 +91,7 @@ coverage without GPU hardware.
 
 The gRPC server implements KEDA's four-method `ExternalScaler` contract.
 Scaling decisions are configured entirely through `ScaledObject` trigger
-metadata — no custom resources or operator are required. Aggregation strategy
+metadata. No custom resources or operator are required. Aggregation strategy
 (max, average, percentile) is a runtime parameter, allowing operators to tune
 fleet-wide scaling behavior without code changes.
 
@@ -142,8 +142,8 @@ the repository.
 GitHub Copilot was used for code-completion assistance during development, and
 Claude (Anthropic) was used to assist with drafting documentation and this
 paper. All code, design decisions, architectural choices, and paper content were
-reviewed, validated, and edited by the human author. The core design — using a
-DaemonSet with direct NVML access behind KEDA's external-scaler gRPC contract —
+reviewed, validated, and edited by the human author. The core design, a
+DaemonSet with direct NVML access behind KEDA's external-scaler gRPC contract,
 was conceived and implemented by the author based on production experience with
 GPU inference workloads.
 
