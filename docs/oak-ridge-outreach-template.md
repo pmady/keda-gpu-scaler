@@ -6,7 +6,7 @@
 
 Hi [Name],
 
-I'm currently leading an AI autoscaling initiative within the CNCF Technical Advisory Group. We've been working on a new architecture to bypass the standard 15-30s Prometheus metric latency, using a DaemonSet to pull direct NVML hardware telemetry and achieve 2-4s scaling decisions.
+I'm currently leading an AI autoscaling initiative within the CNCF Technical Advisory Group. We've been working on a new architecture to bypass the standard 15-30s Prometheus metric latency, using a DaemonSet to read NVML hardware telemetry directly, so scaling decisions are gated only by KEDA's polling interval.
 
 We recently combined this `keda-gpu-scaler` with NUMA-aware GPU scheduling in Volcano to mitigate inter-socket PCIe latency during multi-node training. Given [ORNL / ALCF]'s push toward containerized HPC, I am exploring how these sub-second, scale-to-zero architectures might optimize the energy footprint for your idle inference clusters.
 
@@ -32,7 +32,7 @@ Senior Platform Engineer | CNCF Contributor & Dragonfly Member
 ## Key Technical Talking Points
 
 ### Architecture Highlights
-- **2-4s scaling decisions** vs 15-30s Prometheus latency
+- **No scrape delay**: metric age is KEDA's polling interval, vs 15-30s through Prometheus
 - **Direct NVML telemetry** via DaemonSet architecture
 - **NUMA-aware GPU placement** through Volcano integration
 - **Scale-to-zero capability** for idle inference clusters
