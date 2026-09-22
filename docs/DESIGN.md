@@ -36,8 +36,8 @@ GPU Node                                    KEDA Operator
 │  DaemonSet: keda-gpu-scaler  │           │                  │
 │                              │           │  ExternalScaler  │
 │  ┌────────────┐              │  gRPC     │  trigger config  │
-│  │ NVML poller│──metrics──►  │──:6000──► │                  │
-│  │ (2s loop)  │              │           │  → HPA decision  │
+│  │ NVML read  │──metrics──►  │──:6000──► │                  │
+│  │ on request │              │           │  → HPA decision  │
 │  └────────────┘              │           │  → scale up/down │
 │       ↕                      │           └──────────────────┘
 │  libnvidia-ml.so             │
@@ -47,12 +47,12 @@ GPU Node                                    KEDA Operator
 
 ### Data Flow
 
-1. The DaemonSet starts an NVML polling loop (default 2 seconds)
-2. Each cycle reads: SM utilization, memory controller utilization, VRAM used/total, temperature, power draw
-3. Metrics are cached in memory (no disk, no external store)
-4. KEDA calls `GetMetrics()` over gRPC on the `externalscaler.ExternalScalerServer` interface
-5. The scaler returns the requested metric with the aggregation method specified in the ScaledObject
-6. KEDA feeds the metric value into HPA for a scale up/down/to-zero decision
+1. KEDA calls `GetMetrics()` over gRPC on the `externalscaler.ExternalScalerServer` interface, once per `pollingInterval` set on the ScaledObject
+2. The scaler reads NVML at that moment: SM utilization, memory controller utilization, VRAM used/total, temperature, power draw
+3. Nothing is cached or stored; every request is a fresh read, so metric age is bounded by KEDA's `pollingInterval` plus one NVML call
+4. The scaler returns the requested metric with the aggregation method specified in the ScaledObject
+5. KEDA feeds the metric value into HPA for a scale up/down/to-zero decision
+6. For activation, `StreamIsActive` pushes the active state every `pollIntervalSeconds` (default 10)
 7. (Optional) An HTTP `/metrics` endpoint on port 9090 exposes Prometheus gauges for GPU fleet monitoring — independent of the KEDA scaling path
 
 ### gRPC Interface

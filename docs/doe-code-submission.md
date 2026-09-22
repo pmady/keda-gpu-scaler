@@ -7,7 +7,7 @@
 **Repository**: https://github.com/pmady/keda-gpu-scaler  
 
 ## Technical Description
-keda-gpu-scaler is a KEDA external gRPC scaler that autoscales Kubernetes pods based on real-time GPU utilization. It runs as a DaemonSet, collects NVML metrics directly from GPU hardware, and feeds them to KEDA for scaling decisions. No Prometheus scrape loop required — scaling latency drops from 15-30s to 2-4s.
+keda-gpu-scaler is a KEDA external gRPC scaler that autoscales Kubernetes pods based on real-time GPU utilization. It runs as a DaemonSet, collects NVML metrics directly from GPU hardware, and feeds them to KEDA for scaling decisions. No Prometheus scrape loop is required, so the 15-30s of scrape and adapter delay disappears and metric age is set by KEDA's polling interval.
 
 ## Core Capabilities
 - Real-time GPU monitoring via NVML

@@ -11,8 +11,8 @@ How keda-gpu-scaler works under the hood.
 Runs on every node with `nvidia.com/gpu.present: "true"` label. Each pod:
 
 - Loads `libnvidia-ml.so` via cgo
-- Polls NVML every 2 seconds for GPU metrics
-- Caches metrics in memory
+- Reads NVML on each `GetMetrics` call from KEDA; nothing is cached
+- Pushes activation state over `StreamIsActive` every `pollIntervalSeconds` (default 10)
 - Serves gRPC on port 6000
 - Optionally exposes Prometheus metrics on port 9090
 
@@ -31,7 +31,7 @@ GPU Hardware
     ↓
 libnvidia-ml.so (NVML)
     ↓
-DaemonSet (NVML poller, 2s loop)
+DaemonSet (NVML read per request)
     ↓
 gRPC server (:6000)
     ↓

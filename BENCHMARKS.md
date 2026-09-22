@@ -9,9 +9,9 @@ Time from GPU state change to KEDA receiving the updated metric.
 | Approach | Latency | Components |
 |----------|---------|------------|
 | dcgm-exporter → Prometheus → KEDA | 15-30s | 5 |
-| **keda-gpu-scaler (direct NVML)** | **2-4s** | **2** |
+| **keda-gpu-scaler (direct NVML)** | **KEDA `pollingInterval` + ~ms** | **2** |
 
-The latency reduction comes from eliminating the Prometheus scrape interval (typically 15s) and PromQL query overhead.
+The scaler reads NVML at the moment KEDA calls `GetMetrics`, so there is no scrape interval or adapter delay in the path. Metric age is the `pollingInterval` you set on the ScaledObject plus a single NVML read (see below); with `pollingInterval: 2` that is a few seconds.
 
 ## NVML Poll Overhead
 

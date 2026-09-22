@@ -15,7 +15,7 @@ Kubernetes HPA watches CPU and memory. It can't see GPU utilization. Your vLLM p
 
 The usual fix is dcgm-exporter → Prometheus → KEDA, but that's 5 components and 15-30s of latency.
 
-This project reads GPU metrics directly from NVML and serves them to KEDA over gRPC. 2 components, 2-4 second latency.
+This project reads GPU metrics directly from NVML and serves them to KEDA over gRPC. 2 components, no scrape delay: metric age is whatever `pollingInterval` you set on the ScaledObject.
 
 ### Why Not a Native KEDA Scaler?
 

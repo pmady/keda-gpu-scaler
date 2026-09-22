@@ -41,7 +41,7 @@ If you run GPU workloads on Kubernetes, you've probably noticed that HPA doesn't
 
 VPA doesn't help either. KEDA gets you closer with custom metrics, but the standard approach — DCGM exporter into Prometheus, then a PromQL query feeding KEDA's Prometheus scaler — adds 15-30 seconds of latency and a lot of moving parts.
 
-keda-gpu-scaler takes a different approach: read GPU metrics directly from NVML on each node, serve them to KEDA over gRPC, skip the metrics pipeline entirely. It's a DaemonSet that polls NVML every 2 seconds and implements KEDA's external scaler interface. It ships with scaling profiles for vLLM, Triton, training, and batch workloads, and handles multi-GPU nodes (4x A100, 8x H100) with configurable aggregation.
+keda-gpu-scaler takes a different approach: read GPU metrics directly from NVML on each node, serve them to KEDA over gRPC, skip the metrics pipeline entirely. It's a DaemonSet that reads NVML on each request from KEDA and implements KEDA's external scaler interface. It ships with scaling profiles for vLLM, Triton, training, and batch workloads, and handles multi-GPU nodes (4x A100, 8x H100) with configurable aggregation.
 
 ## 2. The GPU Scaling Blind Spot
 
@@ -111,8 +111,8 @@ GPU Node                                    KEDA Operator
 │  DaemonSet: keda-gpu-scaler  │           │                  │
 │                              │           │  ExternalScaler  │
 │  ┌────────────┐              │  gRPC     │  trigger config  │
-│  │ NVML poller│──metrics──►  │──:6000──► │                  │
-│  │ (2s loop)  │              │           │  → HPA decision  │
+│  │ NVML read  │──metrics──►  │──:6000──► │                  │
+│  │ on request │              │           │  → HPA decision  │
 │  └────────────┘              │           │  → scale up/down │
 │       ↕                      │           └──────────────────┘
 │  libnvidia-ml.so             │
@@ -122,9 +122,9 @@ GPU Node                                    KEDA Operator
 
 ### 4.2 Data Flow
 
-1. The DaemonSet starts an NVML polling loop (default 2 seconds)
+1. KEDA calls `GetMetrics()` once per `pollingInterval` set on the ScaledObject; the DaemonSet reads NVML at that moment
 2. Each cycle reads: SM utilization, memory controller utilization, VRAM used/total, temperature, power draw
-3. Metrics are cached in memory (no disk, no external store)
+3. Nothing is cached or stored; every request is a fresh read
 4. KEDA calls `GetMetrics()` over gRPC on the `externalscaler.ExternalScalerServer` interface
 5. The scaler returns the requested metric with the aggregation method specified in the ScaledObject
 6. KEDA feeds the metric value into HPA for a scale up/down/to-zero decision
@@ -213,7 +213,7 @@ Scaling + placement, handled.
 |----------|---------------|------------|
 | DCGM → Prometheus → HPA | 15-30 seconds | 5 |
 | DCGM → Prometheus → KEDA | 10-20 seconds | 4 |
-| **keda-gpu-scaler (direct NVML)** | **2-4 seconds** | **2** (DaemonSet + KEDA) |
+| **keda-gpu-scaler (direct NVML)** | **KEDA `pollingInterval` only** | **2** (DaemonSet + KEDA) |
 
 ### 8.2 Production Observations
 
@@ -221,7 +221,7 @@ I've been running keda-gpu-scaler on a 4-node GPU cluster (8x A100 80GB per node
 
 - **VRAM is the right signal for vLLM.** SM utilization stays flat around 60-70% even under heavy load because vLLM batches requests. VRAM pressure tracks actual request queue depth much more closely — once KV cache fills past ~80%, latency spikes within seconds.
 - **Scale-to-zero saves real money.** Dev/staging inference endpoints sit idle 18+ hours a day. Releasing those GPUs when nobody's hitting the endpoint cut our GPU spend on non-prod by roughly 60%.
-- **The 2-second poll interval matters.** With the Prometheus pipeline, a traffic burst would saturate GPUs for 15-30 seconds before the first new pod even started scheduling. With direct NVML, KEDA sees the spike within one poll cycle and the HPA reacts on the next reconciliation.
+- **KEDA's polling interval is the only delay.** With the Prometheus pipeline, a traffic burst can go unseen for 15-30 seconds of scrape and adapter delay before the first new pod even starts scheduling. With direct NVML, KEDA sees the spike on its next poll and the HPA reacts on the next reconciliation.
 - **Multi-GPU aggregation choice is workload-dependent.** For tensor-parallel vLLM (spreading one model across 4 GPUs), `avg` works because all GPUs load evenly. For running multiple smaller models on the same node, `max` catches the hot GPU faster.
 
 These are observations from one deployment, not a controlled benchmark. Your numbers will vary depending on model size, request patterns, and node configuration.
@@ -264,7 +264,7 @@ keda-gpu-scaler doesn't replace any of these — you probably still want DCGM Ex
 
 Kubernetes doesn't know what's happening on your GPUs, and the existing workarounds add too much latency and too many moving parts.
 
-The DaemonSet + gRPC pattern works because it respects the constraints: NVML needs CGO, GPU devices are node-local, and GPU tooling moves faster than KEDA's release cycle. Direct NVML reads get metric latency down to 2-4 seconds from the 15-30 you get with the Prometheus pipeline.
+The DaemonSet + gRPC pattern works because it respects the constraints: NVML needs CGO, GPU devices are node-local, and GPU tooling moves faster than KEDA's release cycle. Direct NVML reads remove the 15-30 seconds of scrape and adapter delay you get with the Prometheus pipeline; what remains is KEDA's own polling interval.
 
 I've been running this in production and the architecture holds up. The code is at [keda-gpu-scaler](https://github.com/pmady/keda-gpu-scaler) — contributions welcome.
 

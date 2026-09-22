@@ -14,7 +14,7 @@ keda-gpu-scaler
 
 A KEDA external scaler that reads GPU metrics via NVML and autoscales Kubernetes workloads based on actual GPU load. Runs as a DaemonSet on GPU nodes, serves metrics over gRPC to KEDA.
 
-The short version: Kubernetes HPA can't see GPU utilization. A vLLM pod can be serving 200 requests at 8% CPU while the GPU is pegged. The usual fix is dcgm-exporter → Prometheus → PromQL → KEDA, which works but adds 15-30s of latency and 5 moving parts. This skips all of that — polls NVML directly, responds in 2-4s.
+The short version: Kubernetes HPA can't see GPU utilization. A vLLM pod can be serving 200 requests at 8% CPU while the GPU is pegged. The usual fix is dcgm-exporter → Prometheus → PromQL → KEDA, which works but adds 15-30s of latency and 5 moving parts. This skips all of that: it reads NVML directly when KEDA asks, so metric age is just KEDA's polling interval.
 
 Includes scaling profiles for vLLM, Triton, training, and batch inference so you don't have to guess the right thresholds.
 

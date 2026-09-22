@@ -38,9 +38,10 @@ metrics directly from the NVIDIA Management Library (NVML) on each node and
 serves them to Kubernetes autoscaling over gRPC, removing the intermediate
 metrics pipeline. We explain why GPU support must run as a DaemonSet rather than
 inside the KEDA operator, present the architecture and scaling profiles for
-inference engines such as vLLM and Triton, and compare the resulting metric
-latency of 2--4~s with the 15--30~s typical of the Prometheus pipeline, while
-supporting GPU scale-to-zero.
+inference engines such as vLLM and Triton, and show that metric age becomes a
+function of KEDA's polling interval alone, rather than of the 15--30~s of scrape
+and adapter delay typical of the Prometheus pipeline, while supporting GPU
+scale-to-zero.
 \end{abstract}
 
 \section{Introduction}
@@ -57,8 +58,8 @@ components to operate.
 
 \texttt{keda-gpu-scaler} \cite{kgs} takes a different approach: it reads GPU
 metrics directly from NVML \cite{nvml} on each node and serves them to KEDA over
-gRPC, skipping the metrics pipeline. It runs as a DaemonSet that polls NVML on a
-short interval and implements KEDA's external scaler interface
+gRPC, skipping the metrics pipeline. It runs as a DaemonSet that reads NVML on
+each request from KEDA and implements KEDA's external scaler interface
 \cite{keda-extscaler}. It ships scaling profiles for inference and training
 workloads and handles multi-GPU nodes with configurable aggregation. This paper
 describes the problem, why native integration into KEDA is not viable, the
@@ -140,8 +141,8 @@ GPU Node                                    KEDA Operator
 |  DaemonSet: keda-gpu-scaler  |           |                  |
 |                              |           |  ExternalScaler  |
 |  +------------+              |  gRPC     |  trigger config  |
-|  | NVML poller|--metrics-->  |--:6000--> |                  |
-|  | (2s loop)  |              |           |  -> HPA decision  |
+|  | NVML read  |--metrics-->  |--:6000--> |                  |
+|  | on request |              |           |  -> HPA decision  |
 |  +------------+              |           |  -> scale up/down |
 |       ^                      |           +------------------+
 |  libnvidia-ml.so             |
@@ -150,12 +151,16 @@ GPU Node                                    KEDA Operator
 \end{Verbatim}
 
 \subsection{Data flow}
-Each poll cycle (2~s by default) reads streaming-multiprocessor (SM) utilization,
-memory-controller utilization, device memory used and total, temperature, and
-power draw. Metrics are cached in memory with no disk or external store. When KEDA
-calls \texttt{GetMetrics} over gRPC, the scaler returns the requested metric using
-the aggregation method named in the \texttt{ScaledObject}, and KEDA feeds the
-value to the HPA for a scale up, down, or to-zero decision.
+When KEDA calls \texttt{GetMetrics} over gRPC, the scaler reads
+streaming-multiprocessor (SM) utilization, memory-controller utilization, device
+memory used and total, temperature, and power draw from NVML at that moment.
+Nothing is cached or written to disk; every request is a fresh read. The scaler
+returns the requested metric using the aggregation method named in the
+\texttt{ScaledObject}, and KEDA feeds the value to the HPA for a scale up, down,
+or to-zero decision. Metric age is therefore bounded by the
+\texttt{pollingInterval} set on the \texttt{ScaledObject}, plus a single NVML
+call that takes milliseconds. For activation, \texttt{StreamIsActive} pushes
+the active state every \texttt{pollIntervalSeconds} (10~s by default).
 
 \subsection{gRPC interface}
 The scaler implements four methods of KEDA's external scaler contract:
@@ -230,7 +235,7 @@ of the pipeline approaches with the direct-NVML approach.
 \midrule
 DCGM $\rightarrow$ Prometheus $\rightarrow$ HPA & 15--30~s & 5 \\
 DCGM $\rightarrow$ Prometheus $\rightarrow$ KEDA & 10--20~s & 4 \\
-\texttt{keda-gpu-scaler} (direct NVML) & 2--4~s & 2 \\
+\texttt{keda-gpu-scaler} (direct NVML) & KEDA \texttt{pollingInterval} only & 2 \\
 \bottomrule
 \end{tabular}
 \caption{Metric latency and component count.}
@@ -243,10 +248,10 @@ SM utilization can stay moderate under heavy load while device memory tracks
 request-queue depth closely, so the \texttt{vllm-inference} profile scales on
 memory and on the engine's own queue metrics rather than on SM utilization
 alone. Scale-to-zero targets development and staging endpoints that sit idle
-for long stretches. The short poll interval determines how quickly a traffic
-burst becomes a scaling decision: with the Prometheus pipeline a burst can
-saturate GPUs for 15--30~s before a new pod is scheduled, whereas direct NVML
-surfaces it within one poll cycle. The best aggregation strategy is
+for long stretches. KEDA's polling interval determines how quickly a traffic
+burst becomes a scaling decision: with the Prometheus pipeline a burst can go
+unseen for 15--30~s of scrape and adapter delay before a new pod is scheduled,
+whereas direct NVML surfaces it on the next KEDA poll. The best aggregation strategy is
 workload-dependent, which is why it is a runtime parameter: \texttt{avg} suits
 tensor-parallel serving across the GPUs of a node, while \texttt{max} catches a
 hot device faster when several smaller models share a node. A controlled
@@ -308,7 +313,8 @@ Kubernetes has no visibility into GPU state, and existing workarounds add latenc
 and operational complexity. A DaemonSet that reads NVML directly and serves KEDA
 over gRPC respects the underlying constraints: NVML requires cgo, GPU devices
 are node-local, and GPU tooling evolves faster than the KEDA release cycle. It
-reduces metric latency to a few seconds while enabling GPU scale-to-zero. The
+removes the scrape and adapter delay from the metric path while enabling GPU
+scale-to-zero. The
 software is open source and available at \cite{kgs}.
 
 \begin{thebibliography}{99}
