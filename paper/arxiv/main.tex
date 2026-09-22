@@ -51,8 +51,8 @@ language model (LLM) serving pod can be handling hundreds of concurrent requests
 with its GPU fully saturated while reporting under 10\% CPU, and the HPA takes no
 action. The Vertical Pod Autoscaler does not address this either. KEDA
 \cite{keda} brings custom-metric scaling within reach, but the standard route to
-GPU metrics---an exporter feeding Prometheus, a PromQL query, and either a
-Prometheus adapter or KEDA's Prometheus scaler---adds latency and several
+GPU metrics (an exporter feeding Prometheus, a PromQL query, and either a
+Prometheus adapter or KEDA's Prometheus scaler) adds latency and several
 components to operate.
 
 \texttt{keda-gpu-scaler} \cite{kgs} takes a different approach: it reads GPU
@@ -123,9 +123,9 @@ has no access to devices on worker nodes. A DaemonSet is the appropriate pattern
 each instance runs on a GPU node, mounts the device files, and reads metrics
 locally.
 
-\paragraph{Independent release cycle.} GPU tooling evolves quickly---new
+\paragraph{Independent release cycle.} GPU tooling evolves quickly, with new
 architectures, new inference servers, and new metrics such as Multi-Instance GPU
-(MIG) partitions. KEDA releases coordinate across many scalers, so shipping GPU
+(MIG) partitions arriving every few months. KEDA releases coordinate across many scalers, so shipping GPU
 changes on that cadence would be slow. A standalone component can iterate
 independently. This design was discussed in the KEDA project \cite{keda7538}.
 
@@ -211,10 +211,10 @@ concern that affects performance. In a dual-socket server each GPU is wired to o
 NUMA node over PCIe. If a pod's CPU is placed on one NUMA node and its GPU on
 another, memory accesses cross the inter-socket link, adding latency that
 accumulates during model loading and inference. Topology-aware placement, which
-we contributed to the Volcano scheduler \cite{volcano,volcanopr}, discovers
+we have proposed for the Volcano scheduler \cite{volcano,volcanopr}, discovers
 GPU-to-NUMA mappings and co-locates CPU and GPU on the same NUMA node. Combining
-the two---utilization-driven scaling from \texttt{keda-gpu-scaler} and
-topology-aware placement from Volcano---addresses both scaling and placement.
+utilization-driven scaling from \texttt{keda-gpu-scaler} with topology-aware
+placement from Volcano addresses both scaling and placement.
 
 \section{Evaluation}
 
@@ -272,8 +272,8 @@ breach sub-second service-level objectives, and hardware utilization is a
 misleading signal because a GPU can be busy on a trivial task while a critical
 event waits in the queue.
 
-Coupling event-driven activation---for example, the depth or severity of an
-anomaly queue drawn from the network data plane---with GPU scale-to-zero lets
+Coupling event-driven activation, for example the depth or severity of an
+anomaly queue drawn from the network data plane, with GPU scale-to-zero lets
 operators provision cognitive compute only during active reasoning and release it
 immediately afterward. This separates a lightweight, CPU-based observability
 control plane (the ``watchers'') from a GPU-backed execution plane (the
@@ -306,8 +306,8 @@ cluster-level scaling decisions.
 
 Kubernetes has no visibility into GPU state, and existing workarounds add latency
 and operational complexity. A DaemonSet that reads NVML directly and serves KEDA
-over gRPC respects the underlying constraints---NVML requires cgo, GPU devices
-are node-local, and GPU tooling evolves faster than the KEDA release cycle---and
+over gRPC respects the underlying constraints: NVML requires cgo, GPU devices
+are node-local, and GPU tooling evolves faster than the KEDA release cycle. It
 reduces metric latency to a few seconds while enabling GPU scale-to-zero. The
 software is open source and available at \cite{kgs}.
 
