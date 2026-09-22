@@ -69,8 +69,9 @@ existing tools for architectural reasons. KEDA's external-scaler gRPC contract
 is the only extension point that allows a node-local daemon to push live
 hardware state directly into the scaling loop without an intermediate time-series
 database. Embedding GPU logic into KEDA core would couple KEDA's release cycle
-to NVML and vendor-specific dependencies; the KEDA maintainers have explicitly
-recommended external scalers for hardware-specific metrics. Contributing to
+to NVML and vendor-specific dependencies; KEDA's documentation directs metric
+sources without a built-in scaler to the external scaler interface
+[@kedaexternal]. Contributing to
 `dcgm-exporter` would not eliminate the Prometheus dependency, which is the
 primary source of latency and operational complexity that this project removes.
 
@@ -100,23 +101,21 @@ saturation with request-queue pressure in a single `ScaledObject`.
 
 # Research impact statement
 
-`keda-gpu-scaler` is deployed in production at a Fortune 500 industrial
-distributor, where it autoscales vLLM inference workloads on a four-node A100
-cluster, replacing a dcgm-exporter/Prometheus pipeline that added approximately
-30 seconds of metric latency. The project's design was presented in a CNCF TAG
-Runtime whitepaper on GPU-aware autoscaling [@cncfwhitepaper] and discussed in
-an IEEE Communications Society Technology Blog article on scaling agentic AI in
-autonomous telecom networks [@comsocblog].
+The project's `ADOPTERS.md` lists one production deployment, autoscaling vLLM
+inference on a four-node A100 cluster since March 2026. The design was
+described in a CNCF blog post on building a GPU external scaler for KEDA
+[@cncfblog] and covered in articles in VKTR [@vktr] and Techstrong.ai
+[@techstrong], and the project is discussed in an IEEE Communications Society
+Technology Blog article on scaling agentic AI in telecom networks [@comsocblog].
+It is the subject of an accepted session at KubeCon + CloudNativeCon North
+America 2026 [@kubecon2026].
 
-The repository has 130 stars, 36 forks, and contributions from multiple
-external developers across organizations, including a vendor-agnostic GPU
-collector factory contributed by an independent developer (PR #222). The project
-has eight tagged releases spanning twelve months of iterative development, with
-305 non-merge commits, CI on every pull request, Dependabot for dependency
-management, and OpenSSF Scorecard and CodeQL security analysis enabled. A
-Terraform-based infrastructure-as-code stack for reproducible GPU cluster
-provisioning is included and tested via Terratest end-to-end tests, contributed
-by another external collaborator.
+At the time of writing the repository has 130 stars, 36 forks, and merged pull
+requests from thirteen external contributors, including a vendor-agnostic GPU
+collector factory (PR #222) and a Terraform stack for reproducible GPU cluster
+provisioning with Terratest end-to-end tests. There are eight tagged releases
+between May and September 2026 and 248 non-merge commits, with CI on every pull
+request, Dependabot, OpenSSF Scorecard, and CodeQL enabled.
 
 # Functionality
 
