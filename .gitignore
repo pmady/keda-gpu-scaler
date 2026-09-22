@@ -13,3 +13,6 @@ terraform/
 # for the Terraform artifacts that are still ignored within it)
 !infra/terraform/
 dev/
+
+# duplicate of keda-gpu-scaler-arxiv.pdf, built locally
+paper/arxiv/main.pdf

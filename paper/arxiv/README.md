@@ -1,7 +1,7 @@
 # arXiv preprint
 
 `main.tex` is a self-contained LaTeX preprint (article class, inline
-bibliography) derived from the CNCF TAG Infrastructure whitepaper in
+bibliography) derived from the author's draft whitepaper in
 `docs/cncf-tag-infra/gpu-aware-autoscaling-whitepaper.md`.
 
 ## Build
