@@ -177,6 +177,27 @@ cluster-wide RBAC. The gRPC port is exposed as a ClusterIP Service and is not
 reachable outside the cluster. The optional Prometheus endpoint can be disabled.
 No secrets are required, and all NVML calls are read-only.
 
+\section{Metric Selection}
+
+The scaler reads four device metrics from NVML on each request: streaming-multiprocessor
+(SM) utilization, device memory used and total, temperature, and power draw. It can also
+read engine-level signals where they are exposed: pending queue depth and KV-cache usage
+from vLLM, and queue statistics from Triton. Which of these drives scaling depends on the
+workload, and that choice matters more than the transport does.
+
+SM utilization is the metric DCGM and most GPU dashboards report, and it is a weak scaling
+signal for batched inference. A vLLM server continuously batches requests, so SM utilization
+can sit at a moderate level while the server is near saturation; scaling on it reacts late.
+Device memory is a better proxy, because the KV cache grows with the number and length of
+in-flight requests, so VRAM pressure rises ahead of latency. Where the serving engine
+exposes its own queue the signal is better still: vLLM's pending-request count and KV-cache
+fraction, or Triton's queue wait, measure demand directly rather than inferring it from
+hardware state. Training is the case where SM utilization is the right signal, since the
+devices are meant to run hot and evenly.
+
+Temperature and power are collected for observability and guardrails, not as scaling inputs.
+They lag load and vary with cooling and hardware, so they make poor primary signals.
+
 \section{Scaling Profiles for AI Workloads}
 
 Rather than requiring operators to reason about what ``80\% GPU utilization''
