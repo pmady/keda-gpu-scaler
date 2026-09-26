@@ -40,8 +40,8 @@ metrics pipeline. We explain why GPU support must run as a DaemonSet rather than
 inside the KEDA operator, present the architecture and scaling profiles for
 inference engines such as vLLM and Triton, and show that metric age becomes a
 function of KEDA's polling interval alone, rather than of the 15--30~s of scrape
-and adapter delay typical of the Prometheus pipeline, while supporting GPU
-scale-to-zero.
+and adapter delay typical of the Prometheus pipeline, and supporting scale-to-zero
+for idle GPU workloads.
 \end{abstract}
 
 \section{Introduction}
@@ -164,18 +164,37 @@ the active state every \texttt{pollIntervalSeconds} (10~s by default).
 
 \subsection{gRPC interface}
 The scaler implements four methods of KEDA's external scaler contract:
-\texttt{IsActive} (true when a metric exceeds the activation threshold, enabling
-scale-from-zero), \texttt{StreamIsActive} (a streaming form for push-based
+\texttt{IsActive} (true when the selected metric exceeds the activation
+threshold), \texttt{StreamIsActive} (a streaming form for push-based
 activation), \texttt{GetMetricSpec} (metric name and target for the HPA), and
 \texttt{GetMetrics} (the current value). Using gRPC and protobuf gives type
 safety, avoids PromQL string parsing, and keeps Prometheus out of the critical
 path.
+
+Activation uses the same GPU or engine metric as scaling. That is sufficient
+for scaling \emph{to} zero: an idle GPU drops below the activation threshold
+and KEDA removes the last replica. It is not sufficient on its own for scaling
+\emph{from} zero, because with no replicas there is no serving engine to report
+a queue and the GPU reads idle. Scale-from-zero therefore needs a demand-side
+trigger on the same \texttt{ScaledObject}, such as the KEDA HTTP add-on or a
+message-queue scaler, which activates the first replica; this scaler then takes
+over once the workload is running.
 
 \subsection{Security model}
 The DaemonSet needs only read-only access to NVIDIA device files and no
 cluster-wide RBAC. The gRPC port is exposed as a ClusterIP Service and is not
 reachable outside the cluster. The optional Prometheus endpoint can be disabled.
 No secrets are required, and all NVML calls are read-only.
+
+GPU access is obtained in one of two ways. The default is the NVIDIA
+\texttt{RuntimeClass} provided by the GPU Operator, which injects the driver
+library and device nodes the same way it does for GPU workloads. Where no
+runtime class is available, the chart can instead mount
+\texttt{/dev/nvidiactl}, \texttt{/dev/nvidia-uvm} and \texttt{libnvidia-ml.so}
+from the host. In both cases the pod runs privileged, and in neither case does
+it request an \texttt{nvidia.com/gpu} resource, so it is invisible to the device
+plugin's allocation accounting and does not reduce the GPUs schedulable to
+workloads on the node.
 
 \section{Metric Selection}
 
@@ -188,12 +207,19 @@ workload, and that choice matters more than the transport does.
 SM utilization is the metric DCGM and most GPU dashboards report, and it is a weak scaling
 signal for batched inference. A vLLM server continuously batches requests, so SM utilization
 can sit at a moderate level while the server is near saturation; scaling on it reacts late.
-Device memory is a better proxy, because the KV cache grows with the number and length of
-in-flight requests, so VRAM pressure rises ahead of latency. Where the serving engine
-exposes its own queue the signal is better still: vLLM's pending-request count and KV-cache
-fraction, or Triton's queue wait, measure demand directly rather than inferring it from
-hardware state. Training is the case where SM utilization is the right signal, since the
-devices are meant to run hot and evenly.
+
+Device memory read from NVML is also misleading for vLLM, for a different reason. vLLM
+reserves its KV-cache block pool up front, by default 90\% of device memory
+(\texttt{gpu\_memory\_utilization=0.9}), so NVML reports near-constant memory use whether
+the server is idle or saturated. What varies with load is usage \emph{within} that pool,
+which only the engine can see. vLLM exposes it as \texttt{gpu\_cache\_usage\_perc}, together
+with the pending-request count \texttt{num\_requests\_waiting}; the scaler reads both from
+the engine's metrics endpoint and offers them as the \texttt{vllm\_kv\_cache\_usage} and
+\texttt{vllm\_queue\_depth} metric types. Those are the right signals for vLLM. NVML memory
+remains a usable signal for engines that allocate device memory on demand rather than
+reserving it. Triton's queue wait and request rate are likewise engine-side demand signals.
+Training is the case where SM utilization is the right signal, since the devices are meant
+to run hot and evenly.
 
 Temperature and power are collected for observability and guardrails, not as scaling inputs.
 They lag load and vary with cooling and hardware, so they make poor primary signals.
@@ -211,7 +237,8 @@ means for a given workload, the scaler provides profiles with sensible defaults
 \toprule
 \textbf{Profile} & \textbf{Primary metric} & \textbf{Thr.} & \textbf{Act.} & \textbf{Rationale} \\
 \midrule
-\texttt{vllm-inference} & VRAM utilization & 80\% & 5\% & KV cache pressure tracks queue growth \\
+\texttt{vllm-queue-depth} & Pending requests & 5 & 1 & Engine queue depth; unaffected by KV-cache preallocation \\
+\texttt{vllm-inference} & VRAM utilization & 80\% & 5\% & Memory-based; see caveat below \\
 \texttt{triton-inference} & SM utilization & 75\% & 10\% & SM saturation degrades throughput \\
 \texttt{training} & SM utilization & 90\% & 0\% & Avoid killing checkpoints; no scale-to-zero \\
 \texttt{batch} & VRAM utilization & 70\% & 1\% & Aggressive scale-down to release GPUs \\
@@ -221,6 +248,12 @@ means for a given workload, the scaler provides profiles with sensible defaults
 \label{tab:profiles}
 \end{table}
 
+The \texttt{vllm-inference} profile scales on NVML memory, which under vLLM's default
+memory preallocation stays near 90\% regardless of load and would keep the profile above
+both its target and its activation value. For vLLM, \texttt{vllm-queue-depth} or the
+\texttt{vllm\_kv\_cache\_usage} metric type should be used instead; the memory-based
+profile is being revised accordingly.
+
 \section{Multi-GPU Aggregation}
 
 On nodes with four or eight GPUs, per-device metrics must be reduced to a single
@@ -229,6 +262,15 @@ hits threshold, best for inference where one hot device signals a latency
 problem), \texttt{avg} (best for training where devices should load evenly),
 \texttt{min} (conservative), \texttt{sum} (capacity-based), and the \texttt{p95}
 and \texttt{p99} percentiles.
+
+Aggregation is node-local. KEDA reaches the DaemonSet through a ClusterIP Service,
+so each poll is answered by one pod and describes the GPUs of that pod's node only;
+the scaler does not currently combine readings across nodes. On a single-node GPU
+pool this is the whole picture. On a multi-node pool, a \texttt{ScaledObject} should
+be scoped to one node's workload, for example through node selectors, or each GPU
+node should carry its own \texttt{ScaledObject}. Fleet-wide aggregation, so that one
+\texttt{ScaledObject} can scale a deployment spread across nodes from a cluster-level
+view of GPU load, is future work.
 
 \section{NUMA-Aware GPU Scheduling}
 
@@ -263,13 +305,26 @@ DCGM $\rightarrow$ Prometheus $\rightarrow$ KEDA & 10--20~s & 4 \\
 \label{tab:latency}
 \end{table}
 
+\subsection{What the numbers would need to include}
+This version reports no measured end-to-end scaling times, and the latency
+comparison above is structural rather than benchmarked. A meaningful measurement
+of the time from a load spike to a serving replica would have to account for
+several components in sequence: KEDA's \texttt{pollingInterval} (30~s by
+default, commonly lowered to a few seconds for this scaler), the HPA sync period
+(15~s by default), pod scheduling and image pull, and model load into device
+memory, which for large models dominates everything else. The scaler removes the
+scrape and adapter delay from the first of those; it does not change the others.
+A controlled benchmark that separates these terms across model sizes is planned.
+
 \subsection{Design implications for inference workloads}
 The metric choice matters for vLLM in particular. Because vLLM batches requests,
-SM utilization can stay moderate under heavy load while device memory tracks
-request-queue depth closely, so the \texttt{vllm-inference} profile scales on
-memory and on the engine's own queue metrics rather than on SM utilization
-alone. Scale-to-zero targets development and staging endpoints that sit idle
-for long stretches. KEDA's polling interval determines how quickly a traffic
+SM utilization can stay moderate under heavy load, and because it preallocates
+its KV-cache pool, NVML memory stays high regardless of load. The engine's own
+KV-cache usage and pending-request count are the signals that move with demand,
+so vLLM workloads should scale on those rather than on device metrics.
+Scale-to-zero targets development and staging endpoints that sit idle for long
+stretches; bringing them back from zero needs a request-driven trigger alongside,
+as described in the gRPC interface section. KEDA's polling interval determines how quickly a traffic
 burst becomes a scaling decision: with the Prometheus pipeline a burst can go
 unseen for 15--30~s of scrape and adapter delay before a new pod is scheduled,
 whereas direct NVML surfaces it on the next KEDA poll. The best aggregation strategy is
@@ -315,7 +370,11 @@ pipeline and offers no direct KEDA integration. GPU feature discovery labels
 nodes with static GPU properties but no runtime metrics. HAMi \cite{hami}
 focuses on GPU sharing and partitioning rather than autoscaling. Higher-level AI
 workload managers typically rely on standard HPA. Node autoscalers such as
-Karpenter scale nodes rather than pods and are not GPU-metric aware.
+Karpenter scale nodes rather than pods and are not GPU-metric aware. Knative
+Serving and KServe provide request-driven scale-to-zero and scale-from-zero
+through an activator that buffers requests for a scaled-down service; they
+decide on HTTP concurrency, not on GPU state, and pair naturally with this
+scaler, which supplies the hardware-side signal they lack.
 \texttt{keda-gpu-scaler} is complementary: DCGM Exporter remains useful for
 dashboards, while the scaler moves the scaling \emph{decision} off the monitoring
 pipeline and onto a direct hardware read.
@@ -324,9 +383,10 @@ pipeline and onto a direct hardware read.
 
 Planned directions include AMD ROCm support using a \texttt{rocm-smi}-based
 collector behind the same interface, per-partition MIG metrics, NVLink
-topology-aware scaling, reading vLLM queue depth directly from the engine for
-predictive scaling, and cross-node (fleet-wide) metric aggregation for
-cluster-level scaling decisions.
+topology-aware scaling, cross-node (fleet-wide) metric aggregation for
+cluster-level scaling decisions, a revised vLLM profile that defaults to the
+engine's KV-cache and queue metrics, and a controlled benchmark of end-to-end
+scaling time across model sizes.
 
 \section{Conclusion}
 

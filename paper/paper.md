@@ -26,8 +26,8 @@ horizontal autoscaling of GPU workloads from GPU hardware metrics. It runs as a
 DaemonSet on GPU nodes, reads per-device state directly from the NVIDIA
 Management Library (NVML) [@nvml], and serves those metrics to KEDA over the
 external scaler gRPC contract. Workloads can then scale on GPU utilization,
-memory use, or engine-level signals, including scaling to and from zero
-replicas. Beyond raw device metrics, the scaler can read serving-engine signals
+memory use, or engine-level signals, including scaling idle workloads down to
+zero replicas. Beyond raw device metrics, the scaler can read serving-engine signals
 such as vLLM [@kwon2023vllm] queue depth and NVIDIA Triton queue statistics, so
 scaling can track request pressure rather than only device saturation. It
 supports Multi-Instance GPU (MIG) partitions and several aggregation strategies
