@@ -8,7 +8,8 @@
 \usepackage{xcolor}
 \usepackage{fancyvrb}
 \usepackage[hidelinks]{hyperref}
-\usepackage{url}
+\usepackage{xurl}
+\setlength{\emergencystretch}{3em}
 
 \newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
 
@@ -75,8 +76,9 @@ memory remains. To the HPA, an idle GPU and a saturated GPU are indistinguishabl
 
 \subsection{The metrics pipeline problem}
 The conventional path to GPU-based scaling chains multiple components, for
-example \texttt{DCGM Exporter $\rightarrow$ Prometheus $\rightarrow$ PromQL
-$\rightarrow$ Prometheus Adapter $\rightarrow$ HPA}, or a KEDA variant ending in
+example \texttt{DCGM Exporter} $\rightarrow$ \texttt{Prometheus} $\rightarrow$
+\texttt{PromQL} $\rightarrow$ \texttt{Prometheus Adapter} $\rightarrow$
+\texttt{HPA}, or a KEDA variant ending in
 KEDA's Prometheus scaler. This works but has drawbacks, summarized in
 Table~\ref{tab:pipeline}.
 
