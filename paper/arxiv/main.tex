@@ -40,8 +40,8 @@ metrics pipeline. We explain why GPU support must run as a DaemonSet rather than
 inside the KEDA operator, present the architecture and scaling profiles for
 inference engines such as vLLM and Triton, and show that metric age becomes a
 function of KEDA's polling interval alone, rather than of the 15--30~s of scrape
-and adapter delay typical of the Prometheus pipeline, and supporting scale-to-zero
-for idle GPU workloads.
+and adapter delay typical of the Prometheus pipeline, while still supporting
+scale-to-zero for idle GPU workloads.
 \end{abstract}
 
 \section{Introduction}
