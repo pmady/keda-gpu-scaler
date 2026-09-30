@@ -21,8 +21,7 @@ Keep your existing dcgm-exporter + Prometheus pipeline running during migration.
 ```bash
 # Helm
 helm install keda-gpu-scaler deploy/helm/keda-gpu-scaler \
-  --namespace keda \
-  --set nodeSelector."nvidia\.com/gpu\.present"=true
+  --namespace keda
 
 # Or manifests
 kubectl apply -f deploy/manifests.yaml

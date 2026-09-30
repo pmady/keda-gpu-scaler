@@ -133,12 +133,16 @@ helm install keda-gpu-scaler \
 
 ```bash
 helm install keda-gpu-scaler deploy/helm/keda-gpu-scaler \
-  --namespace keda \
-  --set nodeSelector."nvidia\.com/gpu\.present"=true
+  --namespace keda
 ```
 
-See the [chart README](deploy/helm/keda-gpu-scaler/README.md) for all
-configurable values.
+The chart targets nodes labelled `nvidia.com/gpu.present=true` with the
+`nvidia` RuntimeClass, both provided by the NVIDIA GPU Operator. Without the
+operator, label the nodes yourself and set `runtimeClassName=""` with
+`nvmlHostMounts.enabled=true`; see the
+[getting started guide](docs/getting-started.md). See the
+[chart README](deploy/helm/keda-gpu-scaler/README.md) for all configurable
+values.
 
 ### 2. Attach to your AI Workload
 

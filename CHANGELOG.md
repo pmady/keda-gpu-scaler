@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Helm chart: `nodeSelector` values are now rendered as strings, so `--set nodeSelector.<label>=true` no longer fails with `cannot unmarshal bool into Go struct field PodSpec.spec.template.spec.nodeSelector`. The install examples in the README, getting started guide and migration guide dropped the redundant `--set nodeSelector` flag (the label is the chart default) and now describe the no-GPU-Operator path (`runtimeClassName=""`, `nvmlHostMounts.enabled=true`). ([#231](https://github.com/pmady/keda-gpu-scaler/discussions/231))
 - `parseMetadata` now rejects `gpuIndex` values less than `-1` with a clear error (`invalid gpuIndex -2: it must be -1 (all GPUs) or >= 0`) instead of silently accepting any negative integer. ([#128](https://github.com/pmady/keda-gpu-scaler/issues/128))
 
 ## [v0.5.0] - 2026-06-23

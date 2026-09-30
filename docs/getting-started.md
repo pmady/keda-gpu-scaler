@@ -20,11 +20,32 @@ Or use Helm:
 
 ```bash
 helm install keda-gpu-scaler deploy/helm/keda-gpu-scaler \
-  --namespace keda \
-  --set nodeSelector."nvidia\.com/gpu\.present"=true
+  --namespace keda
 ```
 
 This puts a pod on every GPU node, polling NVML and serving metrics over gRPC on port 6000.
+
+The chart schedules pods onto nodes labelled `nvidia.com/gpu.present=true` and
+uses the `nvidia` RuntimeClass. Both are created by the NVIDIA GPU Operator. On
+a cluster without the operator, label the GPU nodes yourself and mount the
+driver from the host instead:
+
+```bash
+kubectl label node <gpu-node> nvidia.com/gpu.present=true
+
+helm install keda-gpu-scaler deploy/helm/keda-gpu-scaler \
+  --namespace keda \
+  --set runtimeClassName="" \
+  --set nvmlHostMounts.enabled=true
+```
+
+If you override `nodeSelector` on the command line, use `--set-string` so
+Helm keeps the label value as a string; Kubernetes rejects `true` as a
+boolean.
+
+If KEDA is not installed yet, `helm upgrade --install keda kedacore/keda
+--namespace keda --create-namespace` installs it, and is safe to rerun if it
+already is.
 
 ## Attach to Your Workload
 

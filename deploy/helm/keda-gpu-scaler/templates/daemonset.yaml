@@ -117,7 +117,10 @@ spec:
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
-        {{- toYaml . | nindent 8 }}
+        {{- /* Label values must be strings; quote so `--set key=true` works. */}}
+        {{- range $key, $value := . }}
+        {{ $key }}: {{ $value | toString | quote }}
+        {{- end }}
       {{- end }}
       {{- with .Values.tolerations }}
       tolerations:
