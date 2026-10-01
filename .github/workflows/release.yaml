@@ -128,9 +128,11 @@ jobs:
 
       - name: Package chart
         run: |
+          # Chart version is semver without the "v"; appVersion keeps the "v"
+          # because that is how the images job tags the image.
           version="${GITHUB_REF_NAME#v}"
           helm package deploy/helm/keda-gpu-scaler \
-            --version "${version}" --app-version "${version}"
+            --version "${version}" --app-version "${GITHUB_REF_NAME}"
 
       - name: Log in to GHCR
         env:

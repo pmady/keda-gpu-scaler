@@ -3,7 +3,9 @@ name: keda-gpu-scaler
 description: KEDA external scaler that reads GPU metrics via NVML
 type: application
 version: 0.1.0
-appVersion: "0.1.0"
+# Must match a published image tag at ghcr.io/pmady/keda-gpu-scaler (tags carry
+# the leading "v"). The release workflow overrides both fields from the git tag.
+appVersion: "v1.0.1"
 keywords:
   - keda
   - gpu

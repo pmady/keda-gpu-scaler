@@ -72,7 +72,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: keda-gpu-scaler
-          image: ghcr.io/pmady/keda-gpu-scaler:v0.1.0
+          image: ghcr.io/pmady/keda-gpu-scaler:v1.0.1
           imagePullPolicy: Always
           args:
             - "--port=6000"
