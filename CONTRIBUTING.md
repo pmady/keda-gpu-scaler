@@ -16,6 +16,27 @@ See CONTRIBUTORS.md for a list of project contributors and their contributions.
 6. Commit with sign-off: `git commit -s -m "feat: my feature"`
 7. Push and open a Pull Request
 
+## Finding and claiming an issue
+
+Issues labelled `good first issue` are scoped and documented well enough to
+pick up without context from the maintainer. `help wanted` marks issues the
+maintainer would like someone else to take, regardless of difficulty.
+
+To claim an issue, leave a comment on it saying you are working on it. There
+is no assignment step. If an issue has a claim comment but no progress for a
+few weeks, treat it as open again and say so when you pick it up.
+
+## After you open a pull request
+
+- The DCO check runs within seconds and tells you if a commit is missing its
+  sign-off.
+- On your first pull request to this repository, GitHub holds the CI and
+  CodeQL workflows until a maintainer approves them. "Workflows awaiting
+  approval" on a first PR is expected, not a problem with your change.
+- The maintainer aims to respond within a week and usually sooner. If a week
+  passes with no reply, a comment on the PR is welcome.
+- Merged contributors are listed in [CONTRIBUTORS.md](CONTRIBUTORS.md).
+
 ## Development
 
 ### Prerequisites
@@ -60,7 +81,7 @@ pre-commit run --hook-stage manual golangci-lint
 ```
 
 > [!NOTE]
-> The compiled binaries (`keda-gpu-scaler` and `gpu-metrics`) dynamically link NVIDIA's NVML library (`libnvidia-ml.so`) at runtime. **They will fail to start on any machine that does not have the NVIDIA driver installed** for example, a laptop or CI runner with no NVIDIA GPU. You can still build, lint, and run the full test suite without a GPU; all tests use a mock collector.
+> The compiled binaries (`keda-gpu-scaler` and `gpu-metrics`) dynamically link NVIDIA's NVML library (`libnvidia-ml.so`) at runtime. **They will fail to start on any machine that does not have the NVIDIA driver installed**, for example a laptop or CI runner with no NVIDIA GPU, unless you pass `--mock-gpus=N` to `keda-gpu-scaler`, which serves synthetic devices instead of reading NVML. You can build, lint, and run the full test suite without a GPU; all tests use a mock collector.
 
 ### Testing on a GPU Cluster
 
