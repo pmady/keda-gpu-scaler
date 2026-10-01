@@ -84,3 +84,31 @@ func (m *MockCollector) Close() error {
 func (m *MockCollector) DriverVersion() string {
 	return m.DriverVer
 }
+
+// NewMockDevices returns count synthetic 80 GiB devices that all report the
+// given GPU utilization. Memory use tracks utilization so memory-based
+// profiles behave sensibly too. Used by the --mock-gpus flag so the scaler can
+// run on clusters without GPU hardware.
+func NewMockDevices(count int, utilization uint32) []Metrics {
+	if utilization > 100 {
+		utilization = 100
+	}
+	const totalMiB = 81920
+	devices := make([]Metrics, 0, count)
+	for i := 0; i < count; i++ {
+		devices = append(devices, Metrics{
+			Index:              i,
+			UUID:               fmt.Sprintf("GPU-mock-%08d", i),
+			Name:               "Mock GPU",
+			GPUUtilization:     utilization,
+			MemoryUtilization:  utilization,
+			MemoryUsedMiB:      totalMiB * uint64(utilization) / 100,
+			MemoryTotalMiB:     totalMiB,
+			TemperatureCelsius: 40 + utilization/4,
+			PowerDrawWatts:     100 + 3*utilization,
+			PowerLimitWatts:    400,
+			ParentIndex:        -1,
+		})
+	}
+	return devices
+}

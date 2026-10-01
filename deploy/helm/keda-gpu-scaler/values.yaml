@@ -11,7 +11,8 @@ image:
   repository: ghcr.io/pmady/keda-gpu-scaler
   # -- Image pull policy (`Always`, `IfNotPresent`, or `Never`).
   pullPolicy: IfNotPresent
-  # -- Image tag. Defaults to the chart `appVersion` when left empty.
+  # -- Image tag. Defaults to the chart `appVersion` when left empty. Published
+  # tags are `vX.Y.Z` releases and `latest` (built from main).
   tag: ""
 
 # -- Names of existing image pull secrets for pulling from a private registry.
@@ -44,6 +45,20 @@ grpc:
 
 # -- Log verbosity: `debug`, `info`, `warn`, or `error` (passed as `--log-level`).
 logLevel: info
+
+# Synthetic GPUs for trying the scaler on a cluster without GPU hardware. The
+# scaler serves fixed metrics instead of reading NVML, so KEDA, the ScaledObject
+# and the gRPC path can be exercised end to end. Never enable this on real GPU
+# nodes. When enabled you will usually also want `nodeSelector=null`,
+# `runtimeClassName=""` and `tolerations=null` so the pod schedules anywhere.
+mock:
+  # -- Serve synthetic GPU metrics instead of reading NVML (passed as `--mock-gpus`).
+  enabled: false
+  # -- Number of synthetic GPUs to report per node.
+  gpus: 1
+  # -- GPU utilization percentage reported for every synthetic GPU
+  # (passed as `--mock-gpu-utilization`).
+  utilization: 50
 
 # Prometheus metrics endpoint.
 metrics:

@@ -45,7 +45,32 @@ boolean.
 
 If KEDA is not installed yet, `helm upgrade --install keda kedacore/keda
 --namespace keda --create-namespace` installs it, and is safe to rerun if it
-already is.
+already is. The same `upgrade --install` form works for the scaler itself and
+is what you want in scripts, since plain `helm install` fails when the release
+already exists.
+
+## Try it without a GPU
+
+On a cluster with no GPU hardware (a kind or k3d cluster, a lab playground),
+the scaler can serve synthetic GPU metrics so you can see KEDA scale a
+workload before you have real devices. The scaler reads nothing from the
+host in this mode, so do not use it on GPU nodes.
+
+```bash
+helm upgrade --install keda-gpu-scaler deploy/helm/keda-gpu-scaler \
+  --namespace keda --create-namespace \
+  --set mock.enabled=true \
+  --set mock.utilization=85 \
+  --set nodeSelector=null \
+  --set runtimeClassName="" \
+  --set tolerations=null
+```
+
+Every node then reports one GPU at 85% utilization. Point a ScaledObject at
+it with `targetGpuUtilization: "30"` and the target Deployment scales toward
+`maxReplicaCount`; upgrade the release with `--set mock.utilization=0` and it
+scales back down after the cooldown. The repository ships a ready-made demo
+target and ScaledObject in `deploy/helm/keda-gpu-scaler-e2e`.
 
 ## Attach to Your Workload
 

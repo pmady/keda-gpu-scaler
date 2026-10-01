@@ -69,6 +69,9 @@ the `nvidia` RuntimeClass. Common environment-specific overrides are:
 - `imagePullSecrets`: set when pulling the image through a private registry.
 - `nodeSelector` and `tolerations`: adjust when GPU nodes use custom labels or
   taints.
+- `mock.enabled`: serve synthetic GPU metrics on a cluster with no GPUs, to
+  try the KEDA integration before you have hardware. Pair it with
+  `nodeSelector=null`, `runtimeClassName=""` and `tolerations=null`.
 
 Scaling profiles are not Helm values. Add a `profile` to the KEDA
 `ScaledObject` trigger metadata after installing the chart.
@@ -90,8 +93,16 @@ Scaling profiles are not Helm values. Add a `profile` to the KEDA
 |-----|------|---------|-------------|
 | `image.repository` | string | `ghcr.io/pmady/keda-gpu-scaler` | Image repository. |
 | `image.pullPolicy` | string | `IfNotPresent` | Image pull policy (`Always`, `IfNotPresent`, or `Never`). |
-| `image.tag` | string | `""` | Image tag. Defaults to the chart `appVersion` when left empty. |
+| `image.tag` | string | `""` | Image tag. Defaults to the chart `appVersion` when left empty. Published tags are `vX.Y.Z` releases and `latest` (built from main). |
 | `imagePullSecrets` | list | `[]` | Names of existing image pull secrets for pulling from a private registry. |
+
+### Synthetic GPUs (no hardware)
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `mock.enabled` | bool | `false` | Serve synthetic GPU metrics instead of reading NVML (passed as `--mock-gpus`). For clusters without GPU hardware only. |
+| `mock.gpus` | int | `1` | Number of synthetic GPUs to report per node. |
+| `mock.utilization` | int | `50` | GPU utilization percentage reported for every synthetic GPU (passed as `--mock-gpu-utilization`). |
 
 ### Naming & ServiceAccount
 

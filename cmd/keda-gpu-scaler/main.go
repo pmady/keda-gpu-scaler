@@ -52,6 +52,8 @@ var (
 	logLevel            = flag.String("log-level", "info", "Log level (debug, info, warn, error)")
 	healthCheckInterval = flag.Duration("health-check-interval", healthcheck.DefaultInterval, "How often to poll NVML for the gRPC health check")
 	showVersion         = flag.Bool("version", false, "Print version information and exit")
+	mockGPUs            = flag.Int("mock-gpus", 0, "Serve this many synthetic GPUs instead of reading NVML (0 disables; for clusters without GPU hardware)")
+	mockGPUUtilization  = flag.Int("mock-gpu-utilization", 50, "GPU utilization percentage reported by synthetic GPUs when --mock-gpus is set")
 )
 
 func main() {
@@ -95,10 +97,24 @@ func main() {
 		logger.Info("Probe server disabled (probe-port=0)")
 	}
 
-	// Initialize GPU collector (vendor auto-detected)
-	metricsCollector, err := gpu.NewDetectedCollector(logger)
-	if err != nil {
-		logger.Fatal("Failed to initialize GPU collector", zap.Error(err))
+	// Initialize GPU collector: synthetic devices when --mock-gpus is set,
+	// otherwise the vendor is auto-detected from the host's device files.
+	var metricsCollector gpu.MetricsCollector
+	if *mockGPUs > 0 {
+		if *mockGPUUtilization < 0 || *mockGPUUtilization > 100 {
+			logger.Fatal("--mock-gpu-utilization must be between 0 and 100", zap.Int("value", *mockGPUUtilization))
+		}
+		logger.Warn("Serving synthetic GPU metrics; no hardware is being read",
+			zap.Int("mockGPUs", *mockGPUs),
+			zap.Int("mockGPUUtilization", *mockGPUUtilization),
+		)
+		metricsCollector = gpu.NewMockCollector(gpu.NewMockDevices(*mockGPUs, uint32(*mockGPUUtilization)))
+	} else {
+		detected, err := gpu.NewDetectedCollector(logger)
+		if err != nil {
+			logger.Fatal("Failed to initialize GPU collector", zap.Error(err))
+		}
+		metricsCollector = detected
 	}
 	defer func() {
 		if closeErr := metricsCollector.Close(); closeErr != nil {

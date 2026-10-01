@@ -35,6 +35,10 @@ spec:
           args:
             - --port={{ .Values.grpc.port }}
             - --log-level={{ .Values.logLevel }}
+            {{- if .Values.mock.enabled }}
+            - --mock-gpus={{ .Values.mock.gpus }}
+            - --mock-gpu-utilization={{ .Values.mock.utilization }}
+            {{- end }}
             {{- if .Values.metrics.enabled }}
             - --metrics-port={{ .Values.metrics.port }}
             {{- else }}
