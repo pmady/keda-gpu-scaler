@@ -66,11 +66,40 @@ helm upgrade --install keda-gpu-scaler deploy/helm/keda-gpu-scaler \
   --set tolerations=null
 ```
 
-Every node then reports one GPU at 85% utilization. Point a ScaledObject at
-it with `targetGpuUtilization: "30"` and the target Deployment scales toward
-`maxReplicaCount`; upgrade the release with `--set mock.utilization=0` and it
-scales back down after the cooldown. The repository ships a ready-made demo
-target and ScaledObject in `deploy/helm/keda-gpu-scaler-e2e`.
+Every node then reports one GPU at 85% utilization. The repository ships a
+demo target and ScaledObject in `deploy/helm/keda-gpu-scaler-e2e`:
+
+```bash
+helm upgrade --install gpu-demo deploy/helm/keda-gpu-scaler-e2e --set minReplicaCount=0
+kubectl get hpa,scaledobject
+```
+
+With a target of 30% the HPA settles at ceil(85 / 30) = 3 replicas. Changing
+`mock.utilization` rolls out a new scaler pod, so allow for the DaemonSet
+rollout plus KEDA's 15 second poll and the 30 second cooldown before expecting
+a change:
+
+```bash
+helm upgrade keda-gpu-scaler deploy/helm/keda-gpu-scaler -n keda --reuse-values --set mock.utilization=0
+kubectl rollout status ds/keda-gpu-scaler -n keda && sleep 120
+kubectl get deploy/demo-app
+helm upgrade keda-gpu-scaler deploy/helm/keda-gpu-scaler -n keda --reuse-values --set mock.utilization=85
+kubectl rollout status ds/keda-gpu-scaler -n keda && kubectl get deploy/demo-app -w
+```
+
+The event log then shows the whole loop, including the step out of zero that
+the scaler decides on its own through `IsActive`:
+
+```
+KEDAScaleTargetDeactivated   Deactivated apps/v1.Deployment default/demo-app from 3 to 0
+ScalingReplicaSet            Scaled down replica set demo-app-7cf655cb87 from 3 to 0
+KEDAScaleTargetActivated     Scaled apps/v1.Deployment default/demo-app from 0 to 1, triggered by s0-keda_gpu_metric
+SuccessfulRescale            New size: 3; reason: external metric s0-keda_gpu_metric above target
+```
+
+Scaling back down to a non-zero minimum takes up to five minutes because of
+the HPA's default downscale stabilization window. The 30 second
+`cooldownPeriod` only applies to the step to zero.
 
 ## Attach to Your Workload
 
