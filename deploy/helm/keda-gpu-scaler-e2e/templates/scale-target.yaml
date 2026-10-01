@@ -9,7 +9,8 @@ metadata:
   labels:
     app: demo-app
 spec:
-  replicas: 1
+  # No `replicas` here on purpose: KEDA and the HPA own the replica count, and a
+  # value in the template would reset it on every `helm upgrade`.
   selector:
     matchLabels:
       app: demo-app
