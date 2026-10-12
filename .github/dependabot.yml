@@ -14,6 +14,12 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      # init, analyze and upload-sarif must run the same codeql-action
+      # version; bumping one at a time breaks the analyze step.
+      codeql-action:
+        patterns:
+          - "github/codeql-action*"
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
