@@ -25,7 +25,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.25'
+          go-version: '1.26'
 
       - name: Build
         run: CGO_ENABLED=1 go build -v ./cmd/keda-gpu-scaler/
@@ -69,7 +69,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.25'
+          go-version: '1.26'
 
       - name: E2E tests
         run: go test -v -tags=e2e -race -count=1 ./tests/e2e/
@@ -82,7 +82,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.25'
+          go-version: '1.26'
 
       - name: Check formatting
         run: make check-fmt
