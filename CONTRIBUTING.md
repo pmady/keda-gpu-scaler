@@ -43,7 +43,7 @@ few weeks, treat it as open again and say so when you pick it up.
 
 ### Prerequisites
 
-- Go 1.25+ (see `go.mod`)
+- Go 1.26+ (see `go.mod`)
 - `protoc` (for regenerating protobuf code)
 - Docker (for building container images)
 - Helm 3 (for chart development; see the [chart README](deploy/helm/keda-gpu-scaler/README.md))
