@@ -13,7 +13,9 @@ See CONTRIBUTORS.md for a list of project contributors and their contributions.
 3. Create a feature branch: `git checkout -b feat/my-feature`
 4. Make your changes
 5. Run tests: `make test`
-6. Commit with sign-off: `git commit -s -m "feat: my feature"`
+6. Commit with sign-off: `git commit -s -m "feat: my feature"`. Commit subjects
+   use [Conventional Commits](https://www.conventionalcommits.org/) prefixes
+   (`feat:`, `fix:`, `docs:`, `test:`, `chore:`).
 7. Push and open a Pull Request
 
 ## Finding and claiming an issue
@@ -41,10 +43,10 @@ few weeks, treat it as open again and say so when you pick it up.
 
 ### Prerequisites
 
-- Go 1.23+
+- Go 1.25+ (see `go.mod`)
 - `protoc` (for regenerating protobuf code)
 - Docker (for building container images)
-- Helm 3 (for chart development)
+- Helm 3 (for chart development; see the [chart README](deploy/helm/keda-gpu-scaler/README.md))
 
 ### Build & Test
 

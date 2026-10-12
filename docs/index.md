@@ -36,6 +36,7 @@ AFTER:  GPU Pod → keda-gpu-scaler (NVML) → KEDA → HPA
 - [HPC & Cross-Environment Metrics](hpc.md)
 - [Cross-Environment Comparison Guide](cross-env-comparison.md)
 - [FAQ](FAQ.md)
+- [Contributing](contributing.md)
 
 ## GPU Metrics
 
