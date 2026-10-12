@@ -1239,6 +1239,59 @@ func TestGetMetrics_VLLMKVCacheUsage(t *testing.T) {
 	}
 }
 
+// vLLM's V1 engine exports vllm:kv_cache_usage_perc instead of the old
+// vllm:gpu_cache_usage_perc; the scaler must read it (#235).
+func TestGetMetrics_VLLMKVCacheUsage_NewMetricName(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("vllm:num_requests_waiting{model_name=\"qwen\"} 1\nvllm:kv_cache_usage_perc{model_name=\"qwen\"} 0.85\n"))
+	}))
+	defer ts.Close()
+
+	s := NewGPUExternalScaler(gpu.NewMockCollector(testDevices), zap.NewNop())
+	resp, err := s.GetMetrics(context.Background(), &pb.GetMetricsRequest{
+		ScaledObjectRef: &pb.ScaledObjectRef{
+			Name: "vllm-kv-new",
+			ScalerMetadata: map[string]string{
+				"metricType":   "vllm_kv_cache_usage",
+				"vllmEndpoint": ts.URL,
+				"targetValue":  "80",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("GetMetrics() error = %v", err)
+	}
+	if got := resp.MetricValues[0].MetricValueFloat; math.Abs(got-85) > 0.1 {
+		t.Errorf("kv_cache_usage = %v, want 85", got)
+	}
+}
+
+// A scrape that succeeds but lacks the requested metric must be an error,
+// not a 0 that KEDA would treat as an idle server (#235).
+func TestGetMetrics_VLLMMissingMetricIsError(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("vllm:num_requests_running{model_name=\"qwen\"} 4\n"))
+	}))
+	defer ts.Close()
+
+	s := NewGPUExternalScaler(gpu.NewMockCollector(testDevices), zap.NewNop())
+	for _, metricType := range []string{"vllm_queue_depth", "vllm_kv_cache_usage"} {
+		_, err := s.GetMetrics(context.Background(), &pb.GetMetricsRequest{
+			ScaledObjectRef: &pb.ScaledObjectRef{
+				Name: "vllm-missing-" + metricType,
+				ScalerMetadata: map[string]string{
+					"metricType":   metricType,
+					"vllmEndpoint": ts.URL,
+					"targetValue":  "5",
+				},
+			},
+		})
+		if err == nil {
+			t.Errorf("%s: GetMetrics() returned nil error for a scrape without that metric", metricType)
+		}
+	}
+}
+
 func TestIsActive_VLLMQueueDepth(t *testing.T) {
 	ts := fakeVLLMServer()
 	defer ts.Close()

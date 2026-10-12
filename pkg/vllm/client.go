@@ -26,13 +26,31 @@ import (
 	"time"
 )
 
-// EngineMetrics holds the metrics scraped from a vLLM instance.
+// EngineMetrics holds the metrics scraped from a vLLM instance. The Has*
+// flags report whether the metric was present in the scrape at all; a zero
+// value with the flag false means "not exported", not "idle".
 type EngineMetrics struct {
 	QueueDepth   float64 // vllm:num_requests_waiting
 	RunningCount float64 // vllm:num_requests_running
-	KVCacheUsage float64 // vllm:gpu_cache_usage_perc (0.0–1.0)
-	SwappedCount float64 // vllm:num_requests_swapped
+	KVCacheUsage float64 // vllm:kv_cache_usage_perc, or vllm:gpu_cache_usage_perc on older vLLM (0.0-1.0)
+	SwappedCount float64 // vllm:num_requests_swapped (V0 engine only)
+
+	HasQueueDepth   bool
+	HasRunningCount bool
+	HasKVCacheUsage bool
+	HasSwappedCount bool
 }
+
+// Metric names as exported by vLLM. The KV cache gauge was renamed from
+// vllm:gpu_cache_usage_perc to vllm:kv_cache_usage_perc in the V1 engine;
+// both are accepted.
+const (
+	MetricQueueDepth      = "vllm:num_requests_waiting"
+	MetricRunningCount    = "vllm:num_requests_running"
+	MetricKVCacheUsage    = "vllm:kv_cache_usage_perc"
+	MetricKVCacheUsageOld = "vllm:gpu_cache_usage_perc"
+	MetricSwappedCount    = "vllm:num_requests_swapped"
+)
 
 // Client scrapes the vLLM Prometheus metrics endpoint.
 type Client struct {
@@ -84,14 +102,18 @@ func parseMetrics(r io.Reader) (EngineMetrics, error) {
 		}
 
 		switch name {
-		case "vllm:num_requests_waiting":
+		case MetricQueueDepth:
 			m.QueueDepth = value
-		case "vllm:num_requests_running":
+			m.HasQueueDepth = true
+		case MetricRunningCount:
 			m.RunningCount = value
-		case "vllm:gpu_cache_usage_perc":
+			m.HasRunningCount = true
+		case MetricKVCacheUsage, MetricKVCacheUsageOld:
 			m.KVCacheUsage = value
-		case "vllm:num_requests_swapped":
+			m.HasKVCacheUsage = true
+		case MetricSwappedCount:
 			m.SwappedCount = value
+			m.HasSwappedCount = true
 		}
 	}
 	return m, scanner.Err()

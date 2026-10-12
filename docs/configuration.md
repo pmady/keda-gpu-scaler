@@ -33,7 +33,7 @@ Everything goes in the ScaledObject trigger `metadata`. No config files or extra
 | `nvlink_tx_mbps` | MB/s | Aggregate NVLink transmit throughput across all active links |
 | `nvlink_rx_mbps` | MB/s | Aggregate NVLink receive throughput across all active links |
 | `vllm_queue_depth` | count | Pending requests waiting in the vLLM engine (`vllm:num_requests_waiting`) — requires `vllmEndpoint`, see [vLLM Engine Metrics](#vllm-engine-metrics) |
-| `vllm_kv_cache_usage` | % | vLLM GPU KV cache usage (`vllm:gpu_cache_usage_perc`, normalized to 0-100) — requires `vllmEndpoint`, see [vLLM Engine Metrics](#vllm-engine-metrics) |
+| `vllm_kv_cache_usage` | % | vLLM KV cache usage (`vllm:kv_cache_usage_perc`, or `vllm:gpu_cache_usage_perc` on older vLLM, normalized to 0-100) — requires `vllmEndpoint`, see [vLLM Engine Metrics](#vllm-engine-metrics) |
 | `triton_queue_wait_ms` | ms | Average Triton inference queue wait time, derived from `nv_inference_queue_duration_us` — requires `tritonEndpoint`, see [Triton Engine Metrics](#triton-engine-metrics) |
 | `triton_request_rate` | requests/sec | Triton inference request rate, derived from `nv_inference_count` — requires `tritonEndpoint`, see [Triton Engine Metrics](#triton-engine-metrics) |
 
@@ -137,7 +137,9 @@ GPU utilization and VRAM usage (the `vllm-inference` profile) are proxies for lo
 | metricType | Source metric | What it tells you |
 |------------|----------------|--------------------|
 | `vllm_queue_depth` | `vllm:num_requests_waiting` | Requests queued behind the running batch — the most direct signal for "we need more replicas now" |
-| `vllm_kv_cache_usage` | `vllm:gpu_cache_usage_perc` | How full the KV cache is (0-100%) — a leading indicator before requests start queuing |
+| `vllm_kv_cache_usage` | `vllm:kv_cache_usage_perc` (older vLLM: `vllm:gpu_cache_usage_perc`) | How full the KV cache is (0-100%) — a leading indicator before requests start queuing |
+
+If the scrape succeeds but the requested metric is not in it, the scaler returns an error rather than `0`, so KEDA keeps the last value instead of reading a missing metric as an idle server.
 
 Both require `vllmEndpoint` — the full URL of the vLLM engine's metrics endpoint (e.g. `http://vllm-svc:8000/metrics`), reachable from the scaler DaemonSet pods. `vllmEndpoint` has nothing to do with NVML: it's a plain HTTP scrape of the inference server itself. `getMetricValue` routes any `vllm_*` metricType to this HTTP client instead of the NVML collector; the scaler keeps one cached client per distinct `vllmEndpoint`.
 

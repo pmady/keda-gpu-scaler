@@ -456,11 +456,21 @@ func (s *GPUExternalScaler) getVLLMMetricValue(cfg scalerConfig) (float64, error
 		return 0, err
 	}
 
+	// A metric that is absent from the scrape must not be reported as 0:
+	// KEDA would read that as an idle server and scale it down. Return an
+	// error instead so KEDA keeps the last known value.
 	var value float64
 	switch cfg.metricType {
 	case profiles.MetricVLLMQueueDepth:
+		if !m.HasQueueDepth {
+			return 0, fmt.Errorf("vllm endpoint %s did not export %s", cfg.vllmEndpoint, vllm.MetricQueueDepth)
+		}
 		value = m.QueueDepth
 	case profiles.MetricVLLMKVCacheUsage:
+		if !m.HasKVCacheUsage {
+			return 0, fmt.Errorf("vllm endpoint %s did not export %s (or the older %s)",
+				cfg.vllmEndpoint, vllm.MetricKVCacheUsage, vllm.MetricKVCacheUsageOld)
+		}
 		value = m.KVCacheUsage * 100 // normalize 0-1 → 0-100 for KEDA target comparison
 	}
 

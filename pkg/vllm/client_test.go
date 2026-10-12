@@ -84,9 +84,41 @@ func TestParseMetrics_Empty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseMetrics() error = %v", err)
 	}
-	// All zero when nothing is parsed.
+	// All zero when nothing is parsed, and nothing is marked present.
 	if m.QueueDepth != 0 || m.RunningCount != 0 || m.KVCacheUsage != 0 {
 		t.Errorf("expected zero values for empty input, got %+v", m)
+	}
+	if m.HasQueueDepth || m.HasRunningCount || m.HasKVCacheUsage || m.HasSwappedCount {
+		t.Errorf("no metric should be marked present for empty input, got %+v", m)
+	}
+}
+
+// vLLM's V1 engine renamed the KV cache gauge; both spellings must parse.
+func TestParseMetrics_KVCacheNewName(t *testing.T) {
+	input := `# HELP vllm:kv_cache_usage_perc KV cache usage
+# TYPE vllm:kv_cache_usage_perc gauge
+vllm:kv_cache_usage_perc{model_name="qwen"} 0.85
+vllm:num_requests_running{model_name="qwen"} 2
+`
+	m, err := parseMetrics(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("parseMetrics() error = %v", err)
+	}
+	if !m.HasKVCacheUsage || math.Abs(m.KVCacheUsage-0.85) > 0.001 {
+		t.Errorf("KVCacheUsage = %v (present=%v), want 0.85 present", m.KVCacheUsage, m.HasKVCacheUsage)
+	}
+	if m.HasQueueDepth {
+		t.Error("queue depth was not in the scrape but is marked present")
+	}
+}
+
+func TestParseMetrics_PresenceFlags(t *testing.T) {
+	m, err := parseMetrics(strings.NewReader(sampleMetrics))
+	if err != nil {
+		t.Fatalf("parseMetrics() error = %v", err)
+	}
+	if !m.HasQueueDepth || !m.HasRunningCount || !m.HasKVCacheUsage || !m.HasSwappedCount {
+		t.Errorf("all four metrics are in sampleMetrics, got %+v", m)
 	}
 }
 
