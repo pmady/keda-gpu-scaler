@@ -12,7 +12,7 @@ VERSION_PKG := github.com/pmady/keda-gpu-scaler/pkg/version
 LDFLAGS := -X $(VERSION_PKG).Version=$(VERSION) -X $(VERSION_PKG).BuildDate=$(BUILD_DATE)
 
 help: ## Show this help
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 build: ## Build the KEDA scaler binary (requires CGO for NVML)
 	CGO_ENABLED=1 go build -ldflags "$(LDFLAGS)" -o bin/$(BINARY_NAME) ./cmd/keda-gpu-scaler/
