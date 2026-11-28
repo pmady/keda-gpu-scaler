@@ -26,6 +26,9 @@ proto: ## Generate protobuf Go code
 	protoc --go_out=pkg/externalscaler --go_opt=paths=source_relative \
 		--go-grpc_out=pkg/externalscaler --go-grpc_opt=paths=source_relative \
 		-Iproto externalscaler.proto
+	protoc --go_out=pkg/nodemetrics --go_opt=paths=source_relative \
+		--go-grpc_out=pkg/nodemetrics --go-grpc_opt=paths=source_relative \
+		-Iproto node_metrics.proto
 
 test: ## Run unit tests (pkg + cmd; e2e is build-tagged out, run via test-e2e)
 	go test -v -race ./...

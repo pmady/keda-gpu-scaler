@@ -35,11 +35,14 @@ import (
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
 
+	"github.com/pmady/keda-gpu-scaler/pkg/agent"
+	"github.com/pmady/keda-gpu-scaler/pkg/aggregator"
 	"github.com/pmady/keda-gpu-scaler/pkg/env"
 	pb "github.com/pmady/keda-gpu-scaler/pkg/externalscaler"
 	"github.com/pmady/keda-gpu-scaler/pkg/gpu"
 	"github.com/pmady/keda-gpu-scaler/pkg/healthcheck"
 	"github.com/pmady/keda-gpu-scaler/pkg/metrics"
+	nodemetrics "github.com/pmady/keda-gpu-scaler/pkg/nodemetrics"
 	"github.com/pmady/keda-gpu-scaler/pkg/probes"
 	"github.com/pmady/keda-gpu-scaler/pkg/scaler"
 	"github.com/pmady/keda-gpu-scaler/pkg/version"
@@ -52,6 +55,11 @@ var (
 	logLevel            = flag.String("log-level", "info", "Log level (debug, info, warn, error)")
 	healthCheckInterval = flag.Duration("health-check-interval", healthcheck.DefaultInterval, "How often to poll NVML for the gRPC health check")
 	showVersion         = flag.Bool("version", false, "Print version information and exit")
+	role                = flag.String("role", "combined", "Run mode: combined (local scaler, default), agent (serve this node's metrics to an aggregator), or aggregator (cluster-wide scaler)")
+	agentService        = flag.String("agent-service", "", "Headless Service name of the agents, e.g. keda-gpu-scaler-agents.keda.svc.cluster.local; required with --role=aggregator")
+	agentPort           = flag.Int("agent-port", 6000, "gRPC port the agents listen on")
+	agentTimeout        = flag.Duration("agent-timeout", aggregator.DefaultTimeout, "How long one agent call may take before it drops out of the cycle")
+	agentStaleness      = flag.Duration("agent-staleness", aggregator.DefaultStaleness, "How long the last good fleet answer is served when no agent answers (0 disables)")
 	mockGPUs            = flag.Int("mock-gpus", 0, "Serve this many synthetic GPUs instead of reading NVML (0 disables; for clusters without GPU hardware)")
 	mockGPUUtilization  = flag.Int("mock-gpu-utilization", 50, "GPU utilization percentage reported by synthetic GPUs when --mock-gpus is set")
 )
@@ -68,6 +76,7 @@ func main() {
 	defer func() { _ = logger.Sync() }()
 
 	logger.Info("Starting keda-gpu-scaler",
+		zap.String("role", *role),
 		zap.Int("port", *port),
 		zap.Int("metricsPort", *metricsPort),
 		zap.Int("probePort", *probePort),
@@ -97,25 +106,33 @@ func main() {
 		logger.Info("Probe server disabled (probe-port=0)")
 	}
 
-	// Initialize GPU collector: synthetic devices when --mock-gpus is set,
-	// otherwise the vendor is auto-detected from the host's device files.
+	// Initialize the collector. In aggregator mode it fans out to the agents
+	// instead of reading local device files; in the other two modes it reads
+	// this node, either from NVML or from synthetic devices.
 	var metricsCollector gpu.MetricsCollector
-	if *mockGPUs > 0 {
-		if *mockGPUUtilization < 0 || *mockGPUUtilization > 100 {
-			logger.Fatal("--mock-gpu-utilization must be between 0 and 100", zap.Int("value", *mockGPUUtilization))
+	switch *role {
+	case "combined", "agent":
+		metricsCollector = newLocalCollector(logger)
+	case "aggregator":
+		if *agentService == "" {
+			logger.Fatal("--agent-service is required when --role=aggregator")
 		}
-		logger.Warn("Serving synthetic GPU metrics; no hardware is being read",
-			zap.Int("mockGPUs", *mockGPUs),
-			zap.Int("mockGPUUtilization", *mockGPUUtilization),
+		logger.Info("Aggregating GPU metrics from agents",
+			zap.String("service", *agentService),
+			zap.Int("agentPort", *agentPort),
+			zap.Duration("timeout", *agentTimeout),
+			zap.Duration("staleness", *agentStaleness),
 		)
-		metricsCollector = gpu.NewMockCollector(gpu.NewMockDevices(*mockGPUs, uint32(*mockGPUUtilization)))
-	} else {
-		detected, err := gpu.NewDetectedCollector(logger)
-		if err != nil {
-			logger.Fatal("Failed to initialize GPU collector", zap.Error(err))
-		}
-		metricsCollector = detected
+		metricsCollector = aggregator.New(aggregator.Config{
+			Resolve:   aggregator.NewDNSResolver(*agentService, *agentPort),
+			Timeout:   *agentTimeout,
+			Staleness: *agentStaleness,
+			Logger:    logger,
+		})
+	default:
+		logger.Fatal("Unknown --role, want combined, agent or aggregator", zap.String("role", *role))
 	}
+
 	defer func() {
 		if closeErr := metricsCollector.Close(); closeErr != nil {
 			logger.Warn("Failed to close GPU collector", zap.Error(closeErr))
@@ -164,6 +181,13 @@ func main() {
 		probeState.MarkReady()
 	}
 
+	// The aggregator cannot know at startup whether its agents are up yet, and
+	// readiness that never recovers would keep KEDA off the Service for good.
+	// Agent availability is reported per poll and through the gRPC health check.
+	if *role == "aggregator" {
+		probeState.MarkReady()
+	}
+
 	// Start gRPC server
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", *port))
 	if err != nil {
@@ -172,9 +196,14 @@ func main() {
 
 	grpcServer := grpc.NewServer()
 
-	// Register GPU external scaler
-	gpuScaler := scaler.NewGPUExternalScaler(metricsCollector, logger)
-	pb.RegisterExternalScalerServer(grpcServer, gpuScaler)
+	// An agent serves the internal per-node contract; the other two modes serve
+	// the KEDA ExternalScaler contract.
+	if *role == "agent" {
+		nodemetrics.RegisterNodeMetricsServer(grpcServer, agent.NewServer(metricsCollector, envCtx.NodeName, logger))
+	} else {
+		gpuScaler := scaler.NewGPUExternalScaler(metricsCollector, logger)
+		pb.RegisterExternalScalerServer(grpcServer, gpuScaler)
+	}
 
 	// Register health check. The gRPC Health Checking Protocol status for the
 	// server-wide service ("") tracks NVML availability: a background checker
@@ -206,6 +235,27 @@ func main() {
 	if err := grpcServer.Serve(lis); err != nil {
 		logger.Fatal("gRPC server failed", zap.Error(err))
 	}
+}
+
+// newLocalCollector reads this node's GPUs: synthetic devices when --mock-gpus
+// is set, otherwise the vendor auto-detected from the host's device files.
+func newLocalCollector(logger *zap.Logger) gpu.MetricsCollector {
+	if *mockGPUs > 0 {
+		if *mockGPUUtilization < 0 || *mockGPUUtilization > 100 {
+			logger.Fatal("--mock-gpu-utilization must be between 0 and 100", zap.Int("value", *mockGPUUtilization))
+		}
+		logger.Warn("Serving synthetic GPU metrics; no hardware is being read",
+			zap.Int("mockGPUs", *mockGPUs),
+			zap.Int("mockGPUUtilization", *mockGPUUtilization),
+		)
+		return gpu.NewMockCollector(gpu.NewMockDevices(*mockGPUs, uint32(*mockGPUUtilization)))
+	}
+
+	detected, err := gpu.NewDetectedCollector(logger)
+	if err != nil {
+		logger.Fatal("Failed to initialize GPU collector", zap.Error(err))
+	}
+	return detected
 }
 
 func initLogger(level string) *zap.Logger {
