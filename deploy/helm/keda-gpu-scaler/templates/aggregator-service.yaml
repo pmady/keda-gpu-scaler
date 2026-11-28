@@ -1,0 +1,25 @@
+{{- if .Values.aggregator.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "keda-gpu-scaler.fullname" . }}-aggregator
+  labels:
+    {{- include "keda-gpu-scaler.labels" . | nindent 4 }}
+    app.kubernetes.io/component: aggregator
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: grpc
+      protocol: TCP
+      name: grpc
+    {{- if .Values.metrics.enabled }}
+    - port: {{ .Values.metrics.port }}
+      targetPort: metrics
+      protocol: TCP
+      name: metrics
+    {{- end }}
+  selector:
+    {{- include "keda-gpu-scaler.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: aggregator
+{{- end }}

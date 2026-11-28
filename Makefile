@@ -96,4 +96,5 @@ helm-test: ## Validate Helm chart renders correctly with default and custom valu
 	helm lint deploy/helm/keda-gpu-scaler
 	helm template keda-gpu-scaler deploy/helm/keda-gpu-scaler > /dev/null
 	helm template keda-gpu-scaler deploy/helm/keda-gpu-scaler --set grpc.port=50051 --set logLevel=debug > /dev/null
+	helm template keda-gpu-scaler deploy/helm/keda-gpu-scaler --set aggregator.enabled=true > /dev/null
 	@echo "Helm chart validation passed"

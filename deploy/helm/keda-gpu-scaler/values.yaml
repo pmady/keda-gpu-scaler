@@ -60,6 +60,43 @@ mock:
   # (passed as `--mock-gpu-utilization`).
   utilization: 50
 
+# Cluster-wide aggregation (split mode). When enabled, the DaemonSet runs with
+# `--role=agent` and only serves its own node; a GPU-less aggregator Deployment
+# discovers the agents through a headless Service, merges every GPU from every
+# node, and answers KEDA. Point the ScaledObject at `<fullname>-aggregator`
+# instead of the DaemonSet Service.
+aggregator:
+  # -- Run the agent/aggregator split.
+  enabled: false
+  # -- Number of aggregator replicas.
+  replicas: 2
+  # -- Aggregator image. Empty values reuse the DaemonSet image.
+  image:
+    # -- Image repository for the aggregator.
+    repository: ""
+    # -- Image tag for the aggregator. Defaults to `image.tag`, then the chart `appVersion`.
+    tag: ""
+  # -- Extra arguments for the aggregator binary.
+  extraArgs: []
+  # -- How long one agent call may take before that node drops out of the cycle
+  # (passed as `--agent-timeout`).
+  timeout: 2s
+  # -- How long the last good fleet answer is served when no agent answers
+  # (passed as `--agent-staleness`, `0` disables).
+  staleness: 30s
+  # -- Node selector for the aggregator. The DaemonSet's GPU selector is not inherited.
+  nodeSelector: {}
+  # -- Tolerations for the aggregator. The DaemonSet's GPU taint tolerance is not inherited.
+  tolerations: []
+  # -- CPU/memory resource requests and limits for the aggregator container.
+  resources:
+    limits:
+      cpu: 200m
+      memory: 128Mi
+    requests:
+      cpu: 100m
+      memory: 64Mi
+
 # Prometheus metrics endpoint.
 metrics:
   # -- Enable the Prometheus metrics endpoint. When false, the scaler runs with

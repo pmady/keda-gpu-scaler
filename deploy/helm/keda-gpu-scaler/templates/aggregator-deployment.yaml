@@ -1,0 +1,114 @@
+{{- if .Values.aggregator.enabled }}
+{{- $repo := .Values.aggregator.image.repository | default .Values.image.repository }}
+{{- $tag := .Values.aggregator.image.tag | default (.Values.image.tag | default .Chart.AppVersion) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "keda-gpu-scaler.fullname" . }}-aggregator
+  labels:
+    {{- include "keda-gpu-scaler.labels" . | nindent 4 }}
+    app.kubernetes.io/component: aggregator
+spec:
+  replicas: {{ .Values.aggregator.replicas }}
+  selector:
+    matchLabels:
+      {{- include "keda-gpu-scaler.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: aggregator
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "keda-gpu-scaler.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: aggregator
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "keda-gpu-scaler.serviceAccountName" . }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      containers:
+        - name: aggregator
+          image: "{{ $repo }}:{{ $tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - --role=aggregator
+            # The DaemonSet Service is headless in this mode, so DNS returns one
+            # address per ready agent pod and no EndpointSlice RBAC is needed.
+            - --agent-service={{ include "keda-gpu-scaler.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local
+            - --agent-port={{ .Values.grpc.port }}
+            - --agent-timeout={{ .Values.aggregator.timeout }}
+            - --agent-staleness={{ .Values.aggregator.staleness }}
+            - --port={{ .Values.grpc.port }}
+            - --log-level={{ .Values.logLevel }}
+            - --health-check-interval={{ .Values.healthCheckInterval }}
+            {{- if .Values.metrics.enabled }}
+            - --metrics-port={{ .Values.metrics.port }}
+            {{- else }}
+            - --metrics-port=0
+            {{- end }}
+            {{- if .Values.probes.enabled }}
+            - --probe-port={{ .Values.probes.port }}
+            {{- else }}
+            - --probe-port=0
+            {{- end }}
+            {{- range .Values.aggregator.extraArgs }}
+            - {{ . }}
+            {{- end }}
+          ports:
+            - name: grpc
+              containerPort: {{ .Values.grpc.port }}
+              protocol: TCP
+            {{- if .Values.metrics.enabled }}
+            - name: metrics
+              containerPort: {{ .Values.metrics.port }}
+              protocol: TCP
+            {{- end }}
+            {{- if .Values.probes.enabled }}
+            - name: probes
+              containerPort: {{ .Values.probes.port }}
+              protocol: TCP
+            {{- end }}
+          {{- if .Values.probes.enabled }}
+          {{- if eq .Values.probes.type "grpc" }}
+          # The gRPC health status reports NOT_SERVING once the last good fleet
+          # answer is older than `aggregator.staleness`, so KEDA holds position.
+          livenessProbe:
+            grpc:
+              port: {{ .Values.grpc.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            grpc:
+              port: {{ .Values.grpc.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          {{- else }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: probes
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: probes
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          {{- end }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.aggregator.resources | nindent 12 }}
+      {{- with .Values.aggregator.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.aggregator.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

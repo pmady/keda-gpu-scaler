@@ -33,6 +33,9 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
+            {{- if .Values.aggregator.enabled }}
+            - --role=agent
+            {{- end }}
             - --port={{ .Values.grpc.port }}
             - --log-level={{ .Values.logLevel }}
             {{- if .Values.mock.enabled }}

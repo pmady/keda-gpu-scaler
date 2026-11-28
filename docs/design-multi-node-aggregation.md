@@ -103,11 +103,11 @@ The aggregator finds agents through a headless Service in front of the agent
 DaemonSet. A headless Service hands back the A records of every ready agent pod,
 so the aggregator can reach all of them instead of a single load-balanced VIP.
 
-It refreshes that endpoint list on the scaler poll interval. There's no leader
-election, no gossip, and no shared store; the aggregator stays stateless and
-rebuilds its view of the fleet from the endpoints each time. RBAC-wise it needs
-`get`/`list`/`watch` on endpoints (or EndpointSlices) in its own namespace. The
-agents need nothing new, still just the device files.
+It re-resolves that name on every poll with the cluster DNS resolver. There's no
+leader election, no gossip, and no shared store, and no watch on EndpointSlices
+either, so the aggregator needs no RBAC beyond the default service account and
+nothing has to be restarted when nodes join or leave. The agents need nothing
+new, still just the device files.
 
 ### Collecting and combining
 
@@ -195,6 +195,8 @@ the first place (see [DESIGN.md](DESIGN.md#problem-statement)).
 ## Acceptance criteria (from #113 / #142)
 
 - [x] Design doc in `docs/` describing the chosen approach
-- [ ] Implementation of cross-node metric aggregation
-- [ ] Graceful degradation when peers are unreachable
-- [ ] Integration tests
+- [x] Implementation of cross-node metric aggregation (`--role=agent`,
+      `--role=aggregator`, and the internal `NodeMetrics` service)
+- [x] Graceful degradation when peers are unreachable (per-agent timeout,
+      staleness window, `NOT_SERVING` afterwards)
+- [x] Integration tests (`tests/e2e/aggregation_test.go`)

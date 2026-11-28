@@ -256,7 +256,7 @@ Known limits of split mode:
 
 - `gpuIndex` and per-node device addressing are not available, because an index only identifies a card on one node. `gpu_uuid` works: UUIDs are unique across the fleet.
 - `DriverVersion` is not aggregated; agents may run different drivers.
-- No Helm toggle yet: the aggregator Deployment and the headless Service are not part of the chart in this change.
+- In Helm, `aggregator.enabled=true` switches the DaemonSet to `--role=agent`, makes its Service headless, and creates the aggregator Deployment and Service. Point the ScaledObject at `<release>-keda-gpu-scaler-aggregator:6000`.
 
 ## Scale-to-Zero
 
