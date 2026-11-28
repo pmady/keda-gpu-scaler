@@ -104,6 +104,21 @@ Scaling profiles are not Helm values. Add a `profile` to the KEDA
 | `mock.gpus` | int | `1` | Number of synthetic GPUs to report per node. |
 | `mock.utilization` | int | `50` | GPU utilization percentage reported for every synthetic GPU (passed as `--mock-gpu-utilization`). |
 
+### Cluster-wide aggregation (split mode)
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `aggregator.enabled` | bool | `false` | Run the agent/aggregator split. The DaemonSet then only serves its own node (`--role=agent`), and a GPU-less Deployment aggregates the whole fleet and answers KEDA. The DaemonSet Service becomes headless so DNS returns one address per agent. Point the ScaledObject at `<fullname>-aggregator`. |
+| `aggregator.replicas` | int | `2` | Number of aggregator replicas. |
+| `aggregator.image.repository` | string | `""` | Aggregator image repository. Empty reuses `image.repository`. |
+| `aggregator.image.tag` | string | `""` | Aggregator image tag. Empty reuses `image.tag`, then the chart `appVersion`. |
+| `aggregator.extraArgs` | list | `[]` | Extra arguments for the aggregator binary. |
+| `aggregator.timeout` | string | `2s` | How long one agent call may take before that node drops out of the cycle (`--agent-timeout`). |
+| `aggregator.staleness` | string | `30s` | How long the last good fleet answer is served when no agent answers, then the health check reports `NOT_SERVING` (`--agent-staleness`, `0` disables). |
+| `aggregator.nodeSelector` | object | `{}` | Node selector for the aggregator. The DaemonSet's GPU selector is not inherited. |
+| `aggregator.tolerations` | list | `[]` | Tolerations for the aggregator. The DaemonSet's GPU taint tolerance is not inherited. |
+| `aggregator.resources` | object | `{"limits":{"cpu":"200m","memory":"128Mi"},"requests":{"cpu":"100m","memory":"64Mi"}}` | Resources for the aggregator container. |
+
 ### Naming & ServiceAccount
 
 | Key | Type | Default | Description |

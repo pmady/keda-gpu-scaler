@@ -226,6 +226,38 @@ On multi-GPU nodes, `aggregation` controls how per-GPU values are reduced to one
 - **sum** — total utilization. Useful for capacity-based decisions.
 - **p95** / **p99** — percentile of per-GPU values (nearest-rank: values are sorted and the element at the percentile's rank is used). On nodes with several GPUs, a single hot GPU can dominate `max` and trigger unnecessary scaling; percentile aggregation lets you ignore that kind of outlier while still reacting to broad load. With few GPUs (roughly 8 or fewer), `p95`/`p99` will often equal `max`, since there aren't enough samples to leave an outlier out of the selected rank.
 
+## Cluster-Wide Aggregation (split mode)
+
+By default one process does both jobs: it reads the local GPUs and answers KEDA, so a ClusterIP Service in front of the DaemonSet means KEDA talks to one random node and sees only that node's GPUs.
+
+For fleet-wide decisions, run the two roles separately:
+
+- **agent** (`--role=agent`) — the DaemonSet. Reads its node's GPUs and serves them over the internal `NodeMetrics` gRPC service. It does not answer KEDA.
+- **aggregator** (`--role=aggregator`) — a Deployment with no GPUs. It discovers the agents behind a headless Service, queries them concurrently, merges every GPU from every node into one list, and answers KEDA.
+
+The existing `aggregation` parameter then applies across the whole fleet instead of within one node. Because the merged list holds one entry per GPU, `avg` and the percentiles stay correct when nodes have different GPU counts; averaging per-node averages would not.
+
+```yaml
+# on the aggregator
+args:
+  - --role=aggregator
+  - --agent-service=keda-gpu-scaler-agents.keda.svc.cluster.local
+  - --agent-port=6000
+```
+
+The headless Service must be headless (`clusterIP: None`) so DNS returns one address per ready agent pod. The aggregator re-resolves the name on every poll, so no RBAC on EndpointSlices is needed and nothing has to be restarted when nodes join or leave.
+
+Behaviour when nodes are unavailable:
+
+- An agent that does not answer within `--agent-timeout` (default `2s`) drops out of that cycle; the rest of the fleet is still aggregated and the missing nodes are logged.
+- If discovery returns no agents at all, the last good answer is served for `--agent-staleness` (default `30s`). Past that the gRPC health check reports `NOT_SERVING`, so KEDA and the HPA hold position rather than scaling on an empty fleet.
+
+Known limits of split mode:
+
+- `gpuIndex` and per-node device addressing are not available, because an index only identifies a card on one node. `gpu_uuid` works: UUIDs are unique across the fleet.
+- `DriverVersion` is not aggregated; agents may run different drivers.
+- In Helm, `aggregator.enabled=true` switches the DaemonSet to `--role=agent`, makes its Service headless, and creates the aggregator Deployment and Service. Point the ScaledObject at `<release>-keda-gpu-scaler-aggregator:6000`.
+
 ## Scale-to-Zero
 
 Set `activationThreshold` to enable scale-to-zero. When all GPU metrics drop below this value, KEDA reports the scaler as inactive and scales the deployment to zero replicas.
@@ -251,6 +283,11 @@ These flags configure the scaler binary itself (passed via `args` in the DaemonS
 | `--probe-port` | Liveness/readiness HTTP probe port (0 to disable) | `8081` |
 | `--health-check-interval` | How often NVML is polled for the gRPC health check | `30s` |
 | `--log-level` | Log level: `debug`, `info`, `warn`, `error` | `info` |
+| `--role` | `combined` (default), `agent`, or `aggregator` | `combined` |
+| `--agent-service` | Headless Service name of the agents; required with `--role=aggregator` | — |
+| `--agent-port` | gRPC port the agents listen on | `6000` |
+| `--agent-timeout` | How long one agent call may take before it drops out of the cycle | `2s` |
+| `--agent-staleness` | How long the last good fleet answer is served when no agent answers (0 disables) | `30s` |
 
 ### Helm Values
 
