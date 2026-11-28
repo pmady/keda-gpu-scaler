@@ -32,11 +32,13 @@ If you also use dcgm-exporter for Grafana dashboards or alerting, keep it runnin
 
 Yes. NVML reads GPU state through `libnvidia-ml.so`, which is installed with the NVIDIA driver. If you're running GPU workloads on Kubernetes, you already have this.
 
-The binaries link NVML at runtime, so they **will not start on a machine that lacks `libnvidia-ml.so`** — for example, a laptop or CI runner without an NVIDIA driver. In that case the process exits immediately with an `nvml init failed` / `failed to initialize NVML` error. To develop without a GPU, use the mock collector (see below) rather than running the binary directly.
+The scaler can also run on a machine with no GPU at all: pass `--mock-gpus` and it serves synthetic devices without touching NVML or the host (see below). Without a driver and without that flag, it exits at startup with `no supported GPU device found` after looking for `/dev/nvidiactl` and `/dev/kfd`; a host that has the device but a broken driver fails later, with an NVML initialization error.
 
 ## Can I run this without a GPU for development?
 
-Yes. The project has a mock GPU collector (`pkg/gpu/mock.go`) used by all unit and e2e tests. You can build, test, and develop the full gRPC path without GPU hardware.
+Yes. The project has a mock GPU collector (`pkg/gpu/mock.go`) used by all unit and e2e tests, so you can build, test, and develop the full gRPC path without GPU hardware.
+
+The scaler binary exposes the same mock directly: `keda-gpu-scaler --mock-gpus=2 --mock-gpu-utilization=85` serves two synthetic 80 GiB GPUs at 85% utilization and logs `Serving synthetic GPU metrics; no hardware is being read`. `--mock-gpu-utilization` takes 0-100 and memory use follows it, so memory profiles behave sensibly. In Helm, `mock.enabled=true` passes the flag for you.
 
 ## Why not use the KEDA Prometheus scaler with dcgm-exporter?
 

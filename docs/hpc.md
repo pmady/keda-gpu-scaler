@@ -3,7 +3,7 @@
 The standalone `gpu-metrics` CLI collects GPU metrics via NVML without requiring Kubernetes or KEDA. It uses a single `--env` flag to auto-detect the orchestrator and emits a **unified JSON schema** regardless of environment — so you can compare GPU performance across Kubernetes, SLURM, Flux, and bare metal with no post-processing.
 
 > [!NOTE]
-> `gpu-metrics` requires `libnvidia-ml.so` (installed with the NVIDIA driver) on the host. It exits immediately with `nvml init failed` on machines without an NVIDIA driver.
+> `gpu-metrics` requires an NVIDIA driver on the host. On a machine without one it exits immediately with `no supported GPU device found` (it checks `/dev/nvidiactl` and `/dev/kfd`); `--dry-run` still works there and prints the resolved collection plan.
 
 ---
 
